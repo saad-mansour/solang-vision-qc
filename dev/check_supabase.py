@@ -33,9 +33,12 @@ c = code(body)
 print('  bucket vision-photos:', 'OK (exists, public)' if c == 'NoSuchKey' else 'MISSING — create it or run sql/storage-policies.sql' if c == 'NoSuchBucket' else f'HTTP {st} {c}')
 
 if '--probe-upload' in sys.argv:
-    st, body, _ = call('POST', '/storage/v1/object/vision-photos/_probe/ok.txt', b'ok', {'Content-Type': 'text/plain', 'x-upsert': 'true'})
+    import time
+    name = '/storage/v1/object/vision-photos/_probe/p%d.txt' % int(time.time())   # unique: the bucket allows INSERT only (no overwrite)
+    st, body, _ = call('POST', name, b'ok', {'Content-Type': 'text/plain'})
     if st == 200:
-        st2, _, _ = call('GET', '/storage/v1/object/public/vision-photos/_probe/ok.txt', auth=False)
-        print('  upload probe: OK — the station can save photos | public read HTTP', st2)
+        st2, _, _ = call('GET', name.replace('/object/', '/object/public/'), auth=False)
+        st3, body3, _ = call('POST', name, b'changed', {'Content-Type': 'text/plain', 'x-upsert': 'true'})
+        print('  upload probe: OK — the station can save photos | public read HTTP', st2, '| overwrite', 'refused ✓' if st3 != 200 else 'ALLOWED ✗ (re-run sql/storage-policies.sql)')
     else:
         print('  upload probe: BLOCKED HTTP', st, code(body), '→ run sql/storage-policies.sql')
