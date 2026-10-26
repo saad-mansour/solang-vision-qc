@@ -16,3 +16,4 @@ __pycache__/
 Thumbs.db
 supabase_demo.txt
 supabase_demo.txt.txt
+.wrangler/
