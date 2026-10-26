@@ -30,12 +30,12 @@ async function proxy(request, env, url) {
   if (url.pathname !== '/v1/responses') return json(404, { error: 'not found' })
   if (request.method === 'OPTIONS') return new Response(null, { status: 204 })
   if (request.method !== 'POST') return json(405, { error: 'method not allowed' })
-  if (!env.META_API_KEY) return json(500, { error: 'META_API_KEY is not set on the Pages project (Settings → Variables and Secrets)' })
 
   // same-origin only: the station page is served by this very deployment, so a browser Origin must match it (no CORS headers at all)
   const origin = request.headers.get('Origin')
   if (origin && origin !== url.origin) return json(403, { error: 'origin not allowed' })
   if (env.STATION_TOKEN && request.headers.get('X-Station-Token') !== env.STATION_TOKEN) return json(401, { error: 'bad station token' })
+  if (!env.META_API_KEY) return json(500, { error: 'META_API_KEY is not set (the Worker/Pages project → Settings → Variables and Secrets)' })
 
   // per-IP daily limit
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
