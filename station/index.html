@@ -19,6 +19,11 @@
   </div>
   <input id="inspector" class="inspector" type="text" placeholder="اسم المفتشة" autocomplete="off" aria-label="اسم المفتشة">
   <div id="stats" class="stats"></div>
+  <nav id="modeNav" class="modeNav" aria-label="وضع الجهاز">
+    <a href="./" data-mode="all">الكل</a>
+    <a href="?mode=camera" data-mode="camera">📷 كاميرا</a>
+    <a href="?mode=review" data-mode="review">🧐 مراجعة</a>
+  </nav>
 </header>
 
 <div id="banner" class="banner" hidden></div>
@@ -34,6 +39,7 @@
         <span id="pill" class="pill">جاهزة</span>
       </div>
       <div id="camMsg" class="msg" hidden></div>
+      <div id="camLast" class="msg ok" hidden></div>
       <div class="row">
         <label class="toggle"><input type="checkbox" id="autoCap" checked> لقطة تلقائية</label>
         <button type="button" id="btnShoot" class="btn primary">📸 افحص هلق</button>

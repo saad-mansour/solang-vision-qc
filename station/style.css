@@ -61,6 +61,18 @@ main.grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px;
 .pill.still { background: var(--green); color: #fff; }
 .pill.same { background: #e5e7eb; }
 .msg { margin-top: 10px; padding: 10px 14px; background: #fff7ed; border: 2px solid var(--amber); border-radius: var(--radius); font-size: 15px; }
+.msg.ok { background: #f0fdf4; border-color: var(--green); font-weight: 700; }
+
+/* device modes: ?mode=camera (phone above the table) · ?mode=review (inspector's tablet) */
+.modeNav { display: flex; gap: 4px; margin-inline-start: auto; font-size: 13px; }
+.modeNav a { padding: 6px 10px; border-radius: 999px; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
+.modeNav a.active { color: var(--ink); border-color: var(--line); background: var(--bg); font-weight: 700; }
+body.mode-camera #side, body.mode-camera .history, body.mode-camera #tapHint { display: none !important; }
+body.mode-camera main.grid { grid-template-columns: 1fr; }
+body.mode-camera .videoWrap { max-height: 80vh; }
+body.mode-review #cameraPanel { display: none !important; }
+.hist.pending { border-color: var(--amber); background: #fff7ed; }
+.hist.current { outline: 3px solid var(--blue); }
 
 /* 3. photo + overlay: the container shrink-wraps the <img>, the svg covers the same box */
 .viewHead { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-weight: 700; flex-wrap: wrap; }

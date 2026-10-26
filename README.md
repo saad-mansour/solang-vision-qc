@@ -195,7 +195,11 @@ redeploys. The station is at `https://<project>.<account>.workers.dev/station/` 
 **Separate worker (alternative):** [`worker/src/index.js`](worker/src/index.js) with
 [`worker/wrangler.toml`](worker/wrangler.toml); then set `PROXY_URL` in `station/config.js` to the worker URL.
 
-**Tablet:** open the station URL in Chrome, allow the camera, add to home screen. HTTPS is required for the camera.
+**Two devices at the table:** the phone mounted above the table opens `/station/?mode=camera` (captures when the
+garment is still, inspects, saves the inspection with the decision left open) and the inspector's tablet opens
+`/station/?mode=review` (no camera; a new inspection pops up with its circles and crops, the inspector confirms /
+rejects / attributes / decides, and the next piece opens automatically). Both talk only through the demo database.
+Without `?mode` one device does everything. HTTPS is required for the camera; add the page to the home screen.
 
 ## Safety and privacy
 
