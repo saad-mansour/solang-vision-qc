@@ -1,0 +1,80 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 311,
+  "y": 2528,
+  "w": 3477,
+  "h": 1695,
+  "concept": "sweatshirt",
+  "c": 0.5508772134780884
+ },
+ "hasMask": true,
+ "tiles": 8,
+ "candidates": [],
+ "verified": [],
+ "findings": [
+  {
+   "kind": "global",
+   "source": "global",
+   "type": "print",
+   "x": 2310,
+   "y": 3028,
+   "confidence": 0.85,
+   "level": "red",
+   "severity": "major",
+   "why": "Central chest bow decoration is irregular textured and incomplete compared to all other flat printed bows."
+  }
+ ],
+ "parts": {
+  "part": "sleeve",
+  "measure": "sleeve",
+  "boxes": [
+   {
+    "x1": 435.54,
+    "y1": 2748.9,
+    "x2": 1445.85,
+    "y2": 3377.22,
+    "c": 0.941605806350708
+   },
+   {
+    "x1": 2595.39,
+    "y1": 2759.61,
+    "x2": 3662.82,
+    "y2": 3291.54,
+    "c": 0.9336099624633789
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 0.6,
+   "reachDiffPct": 3.5,
+   "cx": 443
+  },
+  "lengthDiffPct": 0.6,
+  "mirror": {
+   "different": false,
+   "confidence": 0.9,
+   "differences": [],
+   "why": "Seams, panel shape and stitching match and the bow shift reflects normal all-over print cutting variation.",
+   "votes": [
+    false,
+    true
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 22141,
+  "output_tokens": 5598,
+  "calls": 11,
+  "sam_calls": 2
+ },
+ "timings": {
+  "garment": 3170,
+  "tiles": 6163,
+  "verify": 1,
+  "silhouette": 11,
+  "parts": 11355,
+  "global": 4955,
+  "total": 25655
+ }
+}

@@ -1,0 +1,107 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 0,
+  "y": 1760,
+  "w": 4284,
+  "h": 2449,
+  "concept": "sweatshirt",
+  "c": 0.8787879347801208
+ },
+ "hasMask": true,
+ "tiles": 15,
+ "candidates": [
+  {
+   "x": 1890,
+   "y": 2133,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.62,
+   "why": "small light discolored speck on green fabric outside printed design",
+   "hits": 1
+  }
+ ],
+ "verified": [
+  {
+   "x": 1890,
+   "y": 2133,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.62,
+   "why": "small light discolored speck on green fabric outside printed design",
+   "hits": 1,
+   "window": {
+    "x": 1640,
+    "y": 1883,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "lint",
+   "vtype": "none",
+   "vconfidence": 0.85,
+   "severity": "minor",
+   "vwhy": "Small isolated white speck sits on top of the knit without distorting yarns.",
+   "second": {
+    "verdict": "texture",
+    "confidence": 0.9
+   }
+  }
+ ],
+ "findings": [],
+ "parts": {
+  "part": "sleeve",
+  "measure": "sleeve",
+  "boxes": [
+   {
+    "x1": 0,
+    "y1": 2127.72,
+    "x2": 1349.46,
+    "y2": 2888.13,
+    "c": 0.9139785170555115
+   },
+   {
+    "x1": 2923.83,
+    "y1": 2088.45,
+    "x2": 4280.43,
+    "y2": 2880.99,
+    "c": 0.949367105960846
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 3,
+   "reachDiffPct": 1.4,
+   "cx": 508
+  },
+  "lengthDiffPct": 1.4,
+  "mirror": {
+   "different": false,
+   "confidence": 0.92,
+   "differences": [],
+   "why": "Both show the same single-panel sleeve with cap seam on the right and cuff on the left, with only all-over print placement, lighting and photo crop varying.",
+   "votes": [
+    true,
+    false
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 40581,
+  "output_tokens": 8256,
+  "calls": 20,
+  "sam_calls": 2
+ },
+ "timings": {
+  "garment": 2524,
+  "tiles": 10499,
+  "verify": 6354,
+  "silhouette": 10,
+  "parts": 17166,
+  "global": 3050,
+  "total": 39603
+ }
+}

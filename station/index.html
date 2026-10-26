@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>SOLANG Vision QC</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 1. top bar -->
+<header class="topbar">
+  <div class="logo">SOLANG Vision QC</div>
+  <select id="orderSel" class="order" aria-label="الطلبية"></select>
+  <div class="seg" role="group" aria-label="الجهة">
+    <button type="button" id="sideFront" class="segBtn active">وجه</button>
+    <button type="button" id="sideBack" class="segBtn">ضهر</button>
+  </div>
+  <input id="inspector" class="inspector" type="text" placeholder="اسم المفتشة" autocomplete="off" aria-label="اسم المفتشة">
+  <div id="stats" class="stats"></div>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main class="grid">
+  <!-- camera / photo column -->
+  <section id="stage">
+
+    <!-- 2. camera panel -->
+    <section id="cameraPanel" class="panel">
+      <div class="videoWrap">
+        <video id="video" autoplay muted playsinline></video>
+        <span id="pill" class="pill">جاهزة</span>
+      </div>
+      <div id="camMsg" class="msg" hidden></div>
+      <div class="row">
+        <label class="toggle"><input type="checkbox" id="autoCap" checked> لقطة تلقائية</label>
+        <button type="button" id="btnShoot" class="btn primary">📸 افحص هلق</button>
+        <button type="button" id="btnFile" class="btn">📁 صورة من الجهاز</button>
+        <input type="file" id="fileInput" accept="image/*" hidden>
+        <button type="button" id="btnFlip" class="btn">🔄 كاميرا</button>
+      </div>
+    </section>
+
+    <!-- 3. inspection panel (photo + overlay) -->
+    <section id="inspectPanel" class="panel" hidden>
+      <div id="viewHead" class="viewHead" hidden>
+        <button type="button" id="btnBack" class="btn">⬅ رجوع للكاميرا</button>
+        <span id="viewTitle"></span>
+      </div>
+      <!-- the svg shares the <img> box exactly (same aspect ratio + meet), so resize/orientation keep it aligned -->
+      <div class="photoWrap" id="photoWrap">
+        <img id="photo" alt="">
+        <svg id="overlay" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div id="progress" class="progress" hidden>
+        <span id="progressText"></span>
+        <span id="progressTimer" class="timer"></span>
+        <span id="progressWarn" class="warn"></span>
+        <button type="button" id="btnCancel" class="btn small">إلغاء</button>
+      </div>
+      <div id="runError" class="err" hidden>
+        <div class="errTitle">صار خطأ بالفحص</div>
+        <pre id="runErrorText"></pre>
+      </div>
+      <div id="costLine" class="cost"></div>
+      <div id="tapHint" class="hint" hidden>كبس عالصورة لتعلّم عيب ما لقطتو الكاميرا</div>
+    </section>
+  </section>
+
+  <!-- 4. findings + 5. decision bar -->
+  <aside id="side">
+    <div class="head"><span>النقاط</span><span id="findingsCount" class="count"></span></div>
+    <div id="findings" class="cards"></div>
+    <div id="decisionBar" class="decision" hidden>
+      <div class="row decRow">
+        <button type="button" class="btn dec" data-dec="pass">✅ سليمة</button>
+        <button type="button" class="btn dec" data-dec="repair">🔧 تصليح</button>
+        <button type="button" class="btn dec" data-dec="reject">❌ مرفوضة</button>
+      </div>
+      <div class="row">
+        <button type="button" id="btnSave" class="btn primary" disabled>💾 حفظ</button>
+        <button type="button" id="btnNew" class="btn">📷 قطعة جديدة</button>
+      </div>
+      <div id="saveStatus" class="status"></div>
+      <button type="button" id="btnRetry" class="btn warnBtn" hidden>🔁 حاول الحفظ مرة تانية</button>
+    </div>
+  </aside>
+</main>
+
+<!-- 6. history strip -->
+<section class="history">
+  <div class="head">آخر الفحوصات</div>
+  <div id="historyStrip" class="strip"></div>
+</section>
+
+<!-- type picker for «➕ عيب ما لقطتو» -->
+<div id="picker" class="picker" hidden>
+  <div class="pickerHead">➕ عيب ما لقطتو — شو نوعو؟</div>
+  <div id="pickerGrid" class="pickerGrid"></div>
+  <button type="button" id="btnPickerCancel" class="btn">رجوع</button>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

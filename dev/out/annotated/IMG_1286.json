@@ -1,0 +1,175 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 293,
+  "y": 1999,
+  "w": 3716,
+  "h": 2588,
+  "concept": "sweatshirt",
+  "c": 0.949367105960846
+ },
+ "hasMask": true,
+ "tiles": 12,
+ "candidates": [
+  {
+   "x": 2379,
+   "y": 2149,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.85,
+   "why": "small dark hanging threads at right neckline seam",
+   "hits": 2
+  },
+  {
+   "x": 2696,
+   "y": 4096,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.75,
+   "why": "small dark spot on fabric above hem",
+   "hits": 2
+  }
+ ],
+ "verified": [
+  {
+   "x": 2379,
+   "y": 2149,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.85,
+   "why": "small dark hanging threads at right neckline seam",
+   "hits": 2,
+   "window": {
+    "x": 2129,
+    "y": 1899,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "loose_thread",
+   "vconfidence": 0.9,
+   "severity": "minor",
+   "vwhy": "Thin dark loose threads protrude from the seam at the neckline edge at center.",
+   "second": null
+  },
+  {
+   "x": 2696,
+   "y": 4096,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.75,
+   "why": "small dark spot on fabric above hem",
+   "hits": 2,
+   "window": {
+    "x": 2446,
+    "y": 3846,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "hole",
+   "vconfidence": 0.75,
+   "severity": "minor",
+   "vwhy": "Small dark elongated opening in the knit just above the seam indicates a pinhole.",
+   "second": null
+  }
+ ],
+ "findings": [
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "loose_thread",
+   "x": 2379,
+   "y": 2149,
+   "confidence": 0.9,
+   "level": "red",
+   "severity": "minor",
+   "why": "Thin dark loose threads protrude from the seam at the neckline edge at center.",
+   "window": {
+    "x": 2129,
+    "y": 1899,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 2
+  },
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "hole",
+   "x": 2696,
+   "y": 4096,
+   "confidence": 0.75,
+   "level": "amber",
+   "severity": "minor",
+   "why": "Small dark elongated opening in the knit just above the seam indicates a pinhole.",
+   "window": {
+    "x": 2446,
+    "y": 3846,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 2
+  }
+ ],
+ "parts": {
+  "part": "sleeve",
+  "measure": "sleeve",
+  "boxes": [
+   {
+    "x1": 428.4,
+    "y1": 2402.61,
+    "x2": 1210.23,
+    "y2": 3844.89,
+    "c": 0.9609756469726562
+   },
+   {
+    "x1": 2856,
+    "y1": 2334.7799999999997,
+    "x2": 3873.45,
+    "y2": 3484.32,
+    "c": 0.9649122953414917
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 7.1,
+   "reachDiffPct": 3.9,
+   "cx": 491
+  },
+  "lengthDiffPct": 3.9,
+  "mirror": {
+   "different": false,
+   "confidence": 0.92,
+   "differences": [],
+   "why": "Both sleeves show the same set-in armhole seam position and curvature, cuff rib attachment, and panel shape with only lay, lighting, and crop differences.",
+   "votes": [
+    false,
+    false
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 35651,
+  "output_tokens": 8502,
+  "calls": 17,
+  "sam_calls": 2
+ },
+ "timings": {
+  "garment": 2291,
+  "tiles": 10925,
+  "verify": 3725,
+  "silhouette": 9,
+  "parts": 16886,
+  "global": 3085,
+  "total": 22273
+ }
+}

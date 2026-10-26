@@ -1,0 +1,21 @@
+# SOLANG Vision QC — Cloudflare Worker proxy for the Meta Model API (code in src/index.js)
+#
+# Deploy from this folder:      npx wrangler deploy
+# Secrets are NOT stored in this file. Set them once; each command prompts for the value and stores it encrypted:
+#   npx wrangler secret put META_API_KEY      # the Meta Model API key (never ships to the browser)
+#   npx wrangler secret put STATION_TOKEN     # shared token the station page sends as X-Station-Token
+# For local `npx wrangler dev`, put the same two as KEY=value lines in worker/.dev.vars (gitignored).
+# The same values can also be set in the dashboard: Worker → Settings → Variables and Secrets.
+
+name = "solang-vision-qc-proxy"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Page origins allowed to call the proxy. "*" for the first test; tighten to the Pages URL once it exists,
+# e.g. "https://solang-vision-qc.pages.dev" (comma-separated list is accepted).
+ALLOWED_ORIGINS = "*"
+# Requests per client IP per day. Keeps a public demo link from draining API credits.
+DAILY_LIMIT = "400"
+# Max request body in MB (photo tiles travel as base64 JPEG inside the JSON body).
+MAX_BODY_MB = "25"

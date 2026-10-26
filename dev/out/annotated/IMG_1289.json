@@ -1,0 +1,123 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 1182,
+  "y": 2038,
+  "w": 2192,
+  "h": 3024,
+  "concept": "pants",
+  "c": 0.9452055096626282
+ },
+ "hasMask": true,
+ "tiles": 6,
+ "candidates": [
+  {
+   "x": 1913,
+   "y": 3147,
+   "type": "snag",
+   "types": [
+    "snag"
+   ],
+   "confidence": 0.65,
+   "why": "tiny disturbed rib with lifted fiber",
+   "hits": 1
+  }
+ ],
+ "verified": [
+  {
+   "x": 1913,
+   "y": 3147,
+   "type": "snag",
+   "types": [
+    "snag"
+   ],
+   "confidence": 0.65,
+   "why": "tiny disturbed rib with lifted fiber",
+   "hits": 1,
+   "window": {
+    "x": 1663,
+    "y": 2897,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "snag",
+   "vconfidence": 0.65,
+   "severity": "minor",
+   "vwhy": "Left of center shows a small pulled loop disrupting the vertical ribs of the knit.",
+   "second": null
+  }
+ ],
+ "findings": [
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "snag",
+   "x": 1913,
+   "y": 3147,
+   "confidence": 0.65,
+   "level": "amber",
+   "severity": "minor",
+   "why": "Left of center shows a small pulled loop disrupting the vertical ribs of the knit.",
+   "window": {
+    "x": 1663,
+    "y": 2897,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 1
+  }
+ ],
+ "parts": {
+  "part": "pant leg",
+  "measure": "leg",
+  "boxes": [
+   {
+    "x1": 1263.78,
+    "y1": 2295.5099999999998,
+    "x2": 2152.71,
+    "y2": 4951.59,
+    "c": 0.9139785170555115
+   },
+   {
+    "x1": 2088.45,
+    "y1": 2249.1,
+    "x2": 3291.54,
+    "y2": 4794.51,
+    "c": 0.9179486632347107
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 3.6,
+   "reachDiffPct": 19.1,
+   "cx": 254
+  },
+  "lengthDiffPct": 3.6,
+  "mirror": {
+   "different": false,
+   "confidence": 0.92,
+   "differences": [],
+   "why": "Both legs have identical waistband stitching, no outer seam, same inseam position, same rib direction and same cuff attachment with no extra or missing panels.",
+   "votes": [
+    false,
+    false
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 19654,
+  "output_tokens": 4065,
+  "calls": 10,
+  "sam_calls": 2
+ },
+ "timings": {
+  "garment": 2839,
+  "tiles": 4061,
+  "verify": 3706,
+  "silhouette": 9,
+  "parts": 8154,
+  "global": 2646,
+  "total": 21415
+ }
+}

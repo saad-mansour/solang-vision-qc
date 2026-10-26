@@ -1,0 +1,18 @@
+# secrets — never commit
+meta_key.txt
+*.key
+.env
+.env.*
+worker/.dev.vars
+# local scratch
+dev/out/*
+!dev/out/annotated/
+dev/photos/
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+supabase_demo.txt
+supabase_demo.txt.txt
+station/config.js

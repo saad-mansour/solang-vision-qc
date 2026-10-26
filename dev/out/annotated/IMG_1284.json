@@ -1,0 +1,279 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 1057,
+  "y": 2035,
+  "w": 2138,
+  "h": 3109,
+  "concept": "pants",
+  "c": 0.9298245906829834
+ },
+ "hasMask": true,
+ "tiles": 6,
+ "candidates": [
+  {
+   "x": 1566,
+   "y": 2424,
+   "type": "hole",
+   "types": [
+    "hole"
+   ],
+   "confidence": 0.85,
+   "why": "small dark puncture in fabric",
+   "hits": 1
+  },
+  {
+   "x": 1766,
+   "y": 2634,
+   "type": "hole",
+   "types": [
+    "hole"
+   ],
+   "confidence": 0.8,
+   "why": "small dark puncture in fabric",
+   "hits": 2
+  },
+  {
+   "x": 1685,
+   "y": 2853,
+   "type": "hole",
+   "types": [
+    "hole"
+   ],
+   "confidence": 0.85,
+   "why": "small dark hole in fabric",
+   "hits": 1
+  },
+  {
+   "x": 2475,
+   "y": 2801,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.65,
+   "why": "small dark spot on pink fabric",
+   "hits": 1
+  }
+ ],
+ "verified": [
+  {
+   "x": 1566,
+   "y": 2424,
+   "type": "hole",
+   "types": [
+    "hole"
+   ],
+   "confidence": 0.85,
+   "why": "small dark puncture in fabric",
+   "hits": 1,
+   "window": {
+    "x": 1316,
+    "y": 2174,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "hole",
+   "vconfidence": 0.75,
+   "severity": "minor",
+   "vwhy": "Small dark slit at center breaks the knit surface consistent with a tiny hole.",
+   "second": null
+  },
+  {
+   "x": 1766,
+   "y": 2634,
+   "type": "hole",
+   "types": [
+    "hole"
+   ],
+   "confidence": 0.8,
+   "why": "small dark puncture in fabric",
+   "hits": 2,
+   "window": {
+    "x": 1516,
+    "y": 2384,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "lint",
+   "vtype": "none",
+   "vconfidence": 0.75,
+   "severity": "minor",
+   "vwhy": "Small dark fibers sit on the surface with intact weave underneath and no hole, snag, or discoloration.",
+   "second": {
+    "verdict": "lint",
+    "confidence": 0.8
+   }
+  },
+  {
+   "x": 1685,
+   "y": 2853,
+   "type": "hole",
+   "types": [
+    "hole"
+   ],
+   "confidence": 0.85,
+   "why": "small dark hole in fabric",
+   "hits": 1,
+   "window": {
+    "x": 1435,
+    "y": 2603,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "hole",
+   "vconfidence": 0.75,
+   "severity": "minor",
+   "vwhy": "Central dark slit breaks the knit surface indicating a small hole rather than removable lint.",
+   "second": null
+  },
+  {
+   "x": 2475,
+   "y": 2801,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.65,
+   "why": "small dark spot on pink fabric",
+   "hits": 1,
+   "window": {
+    "x": 2225,
+    "y": 2551,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "hole",
+   "vconfidence": 0.7,
+   "severity": "minor",
+   "vwhy": "Tiny dark pinhole disrupts the uniform knit at center.",
+   "second": null
+  }
+ ],
+ "findings": [
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "hole",
+   "x": 1566,
+   "y": 2424,
+   "confidence": 0.75,
+   "level": "amber",
+   "severity": "minor",
+   "why": "Small dark slit at center breaks the knit surface consistent with a tiny hole.",
+   "window": {
+    "x": 1316,
+    "y": 2174,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 1
+  },
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "hole",
+   "x": 1685,
+   "y": 2853,
+   "confidence": 0.75,
+   "level": "amber",
+   "severity": "minor",
+   "why": "Central dark slit breaks the knit surface indicating a small hole rather than removable lint.",
+   "window": {
+    "x": 1435,
+    "y": 2603,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 1
+  },
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "hole",
+   "x": 2475,
+   "y": 2801,
+   "confidence": 0.7,
+   "level": "amber",
+   "severity": "minor",
+   "why": "Tiny dark pinhole disrupts the uniform knit at center.",
+   "window": {
+    "x": 2225,
+    "y": 2551,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 1
+  },
+  {
+   "kind": "global",
+   "source": "silhouette",
+   "type": "length",
+   "x": 2599,
+   "y": 4766,
+   "confidence": 0.6900000000000001,
+   "level": "amber",
+   "severity": "major",
+   "why": "رجل أقصر من التانية بحوالي 6.2% (قياس تقريبي من شكل القطعة — تأكد بالمتر)",
+   "measure": {
+    "lenDiffPct": 6.2,
+    "reachDiffPct": 8.6
+   }
+  }
+ ],
+ "parts": {
+  "part": "pant leg",
+  "measure": "leg",
+  "boxes": [
+   {
+    "x1": 1131.69,
+    "y1": 2241.96,
+    "x2": 2138.43,
+    "y2": 5030.13,
+    "c": 0.9024390578269958
+   },
+   {
+    "x1": 2113.44,
+    "y1": 2259.81,
+    "x2": 3113.04,
+    "y2": 4826.64,
+    "c": 0.9064327478408813
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 6.2,
+   "reachDiffPct": 8.6,
+   "cx": 265
+  },
+  "lengthDiffPct": 6.2,
+  "mirror": {
+   "different": false,
+   "confidence": 0.95,
+   "differences": [],
+   "why": "Both legs have matching waistband stitching, cuff seam position and plain panel with no extra seams or decorations.",
+   "votes": [
+    false,
+    false
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 25312,
+  "output_tokens": 6966,
+  "calls": 14,
+  "sam_calls": 2
+ },
+ "timings": {
+  "garment": 2048,
+  "tiles": 5599,
+  "verify": 6982,
+  "silhouette": 12,
+  "parts": 8811,
+  "global": 3239,
+  "total": 26691
+ }
+}

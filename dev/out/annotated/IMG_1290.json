@@ -1,0 +1,196 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 814,
+  "y": 1167,
+  "w": 2785,
+  "h": 4227,
+  "concept": "pants",
+  "c": 0.96875
+ },
+ "hasMask": true,
+ "tiles": 15,
+ "candidates": [
+  {
+   "x": 2637,
+   "y": 3928,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.9,
+   "why": "thin white stray thread lying on black fabric",
+   "hits": 2
+  },
+  {
+   "x": 3275,
+   "y": 5025,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.88,
+   "why": "small white loose thread on black fabric above hem",
+   "hits": 2
+  }
+ ],
+ "verified": [
+  {
+   "x": 2637,
+   "y": 3928,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.9,
+   "why": "thin white stray thread lying on black fabric",
+   "hits": 2,
+   "window": {
+    "x": 2387,
+    "y": 3678,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "lint",
+   "vtype": "none",
+   "vconfidence": 0.9,
+   "severity": "minor",
+   "vwhy": "Thin white wavy fiber rests loosely on black fabric surface with no seam attachment.",
+   "second": {
+    "verdict": "lint",
+    "confidence": 0.95
+   }
+  },
+  {
+   "x": 3275,
+   "y": 5025,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.88,
+   "why": "small white loose thread on black fabric above hem",
+   "hits": 2,
+   "window": {
+    "x": 3025,
+    "y": 4775,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "lint",
+   "vtype": "none",
+   "vconfidence": 0.9,
+   "severity": "minor",
+   "vwhy": "A thin white wavy fiber sits on the black fabric surface and does not match the black seam stitching.",
+   "second": {
+    "verdict": "lint",
+    "confidence": 0.9
+   }
+  }
+ ],
+ "findings": [
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "loose_thread",
+   "x": 2637,
+   "y": 3928,
+   "confidence": 0.6,
+   "level": "amber",
+   "severity": "minor",
+   "why": "شافوها بلاطتين (lint) — Thin white wavy fiber rests loosely on black fabric surface with no seam attachment.",
+   "window": {
+    "x": 2387,
+    "y": 3678,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 2,
+   "unsure": true
+  },
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "loose_thread",
+   "x": 3275,
+   "y": 5025,
+   "confidence": 0.6,
+   "level": "amber",
+   "severity": "minor",
+   "why": "شافوها بلاطتين (lint) — A thin white wavy fiber sits on the black fabric surface and does not match the black seam stitching.",
+   "window": {
+    "x": 3025,
+    "y": 4775,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 2,
+   "unsure": true
+  },
+  {
+   "kind": "global",
+   "source": "mirror",
+   "type": "asymmetry",
+   "x": 2829,
+   "y": 3375,
+   "confidence": 0.85,
+   "level": "red",
+   "severity": "major",
+   "why": "mid-thigh outer transverse seam straight and angled in left leg vs curved and differently positioned in right leg"
+  }
+ ],
+ "parts": {
+  "part": "pant leg",
+  "measure": "leg",
+  "boxes": [
+   {
+    "x1": 913.92,
+    "y1": 1545.81,
+    "x2": 2195.55,
+    "y2": 5230.05,
+    "c": 0.8865247964859009
+   },
+   {
+    "x1": 2163.42,
+    "y1": 1513.68,
+    "x2": 3495.0299999999997,
+    "y2": 5237.19,
+    "c": 0.8787879347801208
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 0.4,
+   "reachDiffPct": 10.1,
+   "cx": 319
+  },
+  "lengthDiffPct": 0.4,
+  "mirror": {
+   "different": true,
+   "confidence": 0.85,
+   "differences": [
+    "mid-thigh outer transverse seam straight and angled in left leg vs curved and differently positioned in right leg"
+   ],
+   "why": "The middle panel seam shape and its junction with the long diagonal seam do not mirror between legs.",
+   "votes": [
+    true,
+    true
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 42171,
+  "output_tokens": 9610,
+  "calls": 22,
+  "sam_calls": 2
+ },
+ "timings": {
+  "garment": 3123,
+  "tiles": 10577,
+  "verify": 6431,
+  "silhouette": 11,
+  "parts": 13205,
+  "global": 3651,
+  "total": 20132
+ }
+}
