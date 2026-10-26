@@ -4,6 +4,7 @@ meta_key.txt
 .env
 .env.*
 worker/.dev.vars
+.dev.vars
 # local scratch
 dev/out/*
 !dev/out/annotated/
@@ -15,4 +16,3 @@ __pycache__/
 Thumbs.db
 supabase_demo.txt
 supabase_demo.txt.txt
-station/config.js

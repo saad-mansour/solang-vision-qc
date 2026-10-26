@@ -182,14 +182,17 @@ node summarize.mjs                  # re-print saved results from out/annotated/
 
 Full step-by-step guide in Arabic for the factory: [`docs/DEPLOY-ar.md`](docs/DEPLOY-ar.md). Short version:
 
-1. **Worker:** create a Cloudflare Worker, paste [`worker/src/index.js`](worker/src/index.js) (or `npx wrangler deploy`
-   from `worker/` with [`worker/wrangler.toml`](worker/wrangler.toml)). Secrets `META_API_KEY`, `STATION_TOKEN`; vars
-   `ALLOWED_ORIGINS`, `DAILY_LIMIT`. Check `/health`.
-2. **Pages:** connect the GitHub repo to Cloudflare Pages, no build command, output directory `/`. The station is at
-   `https://<project>.pages.dev/station/`. `station/config.js` must be in the deployed files (it only holds
-   publishable values).
-3. **config.js:** `PROXY_URL` = the worker URL, the same `STATION_TOKEN`, Supabase URL + publishable key.
-4. **Tablet:** open the station URL in Chrome, allow the camera, add to home screen. HTTPS is required for the camera.
+**One link (recommended):** [`_worker.js`](_worker.js) at the repo root is a Cloudflare Pages "advanced mode" worker:
+it proxies `/v1/responses` to the Meta API with the key kept as a Pages secret and serves everything else from the
+deployed files. Connect the GitHub repo to Cloudflare Pages (framework `None`, no build command, output directory `/`),
+add the secret `META_API_KEY` (optional `STATION_TOKEN`, `DAILY_LIMIT`), redeploy. The station is then at
+`https://<project>.pages.dev/station/` and `station/config.js` keeps `PROXY_URL: ''` (same origin), exactly as in
+local development. Local check of the same setup: `npx wrangler pages dev . --port 8788` with the key in `.dev.vars`.
+
+**Separate worker (alternative):** [`worker/src/index.js`](worker/src/index.js) with
+[`worker/wrangler.toml`](worker/wrangler.toml); then set `PROXY_URL` in `station/config.js` to the worker URL.
+
+**Tablet:** open the station URL in Chrome, allow the camera, add to home screen. HTTPS is required for the camera.
 
 ## Safety and privacy
 

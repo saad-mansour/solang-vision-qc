@@ -19,7 +19,36 @@
 
 ---
 
-## الخطوة 1 — Cloudflare Worker (الوسيط)
+## الطريقة الأسهل — لينك واحد على Cloudflare Pages (الموصى فيها)
+
+الوسيط صار جوّا المستودع نفسو بملف اسمو `_worker.js`، فما في داعي تعمل Worker منفصل. مشروع Pages واحد بيعطيك
+الصفحة والوسيط سوا على نفس اللينك، والمفتاح بيتحط كسرّ بإعدادات المشروع. وكل ما ينرفع تعديل عـGitHub بيتحدّث الموقع لحالو.
+
+**مهم:** هالمشروع جديد ومنفصل تماماً عن مشروع المصنع الموجود بنفس الحساب. ما بتفوت على مشروع المصنع ولا بتغيّر فيه شي.
+
+1. افتح `dash.cloudflare.com` ← من القائمة اليسار «Workers & Pages» ← زر «Create» ← تبويب «Pages» ← «Connect to Git».
+2. اختار GitHub وسجّل دخول إذا طلب. لما يسألك عن المستودعات، اختار «Only select repositories» وعلّم `solang-vision-qc` بس ← «Install & Authorize».
+3. اختار المستودع `saad-mansour/solang-vision-qc` ← «Begin setup».
+4. بصفحة الإعداد:
+   - «Project name»: `solang-vision-qc` (هيدا بيصير اللينك: `https://solang-vision-qc.pages.dev`).
+   - «Production branch»: `main`.
+   - «Framework preset»: `None`.
+   - «Build command»: خلّيها فاضية.
+   - «Build output directory»: `/` (شرطة مايلة وحدة بس).
+   - ما تضيف متغيرات هون، منضيفها بعد أول نشر.
+   - «Save and Deploy». انطر دقيقة لحد ما يكتب «Success».
+5. المفتاح: افتح المشروع ← «Settings» ← «Variables and Secrets» ← «Add»:
+   - الاسم `META_API_KEY`، النوع **Secret**، القيمة: الصق مفتاح Meta من ملف `meta_key.txt` (انسخو من الملف مباشرة، ما تبعتو لحدا). «Save».
+   - (اختياري) `DAILY_LIMIT` نوع Text قيمة `400`.
+6. لازم يعاد النشر لحتى يقرا السرّ: «Deployments» ← جنب آخر نشر زر «⋯» ← «Retry deployment». انطر لحد «Success».
+7. جرّب: افتح `https://solang-vision-qc.pages.dev/health` ← لازم يطلع `"key":"set"`. بعدها افتح
+   `https://solang-vision-qc.pages.dev/station/` من موبايلك، اسمح للكاميرا، وجرّب قطعة.
+
+خلص. الخطوات 1 و2 و3 تحت هي الطريقة القديمة (Worker منفصل + Pages) وما إلك داعي فيها إلا إذا بدك الوسيط على لينك لحالو.
+
+---
+
+## الطريقة البديلة — الخطوة 1 — Cloudflare Worker (الوسيط المنفصل)
 
 1. افتح <https://dash.cloudflare.com> وسجّل دخول.
 2. من القائمة عاليسار اكبس «Workers & Pages» ← زر «Create» ← خلّيك بتبويب «Workers» ← «Start with Hello World!» (بنسخ أقدم اسمو «Create Worker»).
