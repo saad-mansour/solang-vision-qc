@@ -76,7 +76,7 @@ db.uploadPhoto(path, blob, contentType = 'image/jpeg')   // POST /storage/v1/obj
 db.publicUrl(path)                       // `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`
 ```
 - Headers for REST: `apikey: KEY`, `Authorization: Bearer KEY`, `Content-Type: application/json`, plus `Prefer` where stated.
-- Storage upload: same `apikey`/`Authorization` + `Content-Type: <contentType>` + `x-upsert: true`, body = the Blob.
+- Storage upload: same `apikey`/`Authorization` + `Content-Type: <contentType>`, body = the Blob. No upsert: the bucket has no UPDATE policy; a 409 (path already stored by an earlier attempt) counts as success.
 - Paths use URL-safe ASCII only: `YYYY-MM-DD/<inspectionId>/photo.jpg`, `.../annotated.jpg`, `.../crop-<n>.jpg` (the UI decides the names; `uploadPhoto` just uploads).
 - The publishable key cannot DELETE storage objects (by policy) — do not implement delete.
 

@@ -25,7 +25,8 @@ select, input[type=text] { min-height: var(--tap); padding: 0 12px; border: 2px 
 .toggle input { width: 24px; height: 24px; margin: 0; accent-color: var(--green); }
 
 /* 1. top bar */
-.topbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left)); background: var(--panel); border-bottom: 1px solid var(--line); }
+main.grid, .history { padding-inline: max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-left)); }
 .logo { font-weight: 800; font-size: 18px; margin-inline-end: 4px; }
 .order { flex: 1 1 260px; min-width: 0; max-width: 100%; }
 .seg { display: inline-flex; border: 2px solid var(--line); border-radius: var(--radius); overflow: hidden; }
@@ -42,7 +43,7 @@ main.grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px;
 #side { min-width: 0; }
 @media (min-width: 1024px) {
   main.grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
-  #side { position: sticky; top: 72px; max-height: calc(100vh - 84px); overflow: auto; display: flex; flex-direction: column; }
+  #side { position: sticky; top: 72px; max-height: calc(100vh - 84px); max-height: calc(100dvh - 84px); overflow: auto; display: flex; flex-direction: column; }
   #side .cards { flex: 1 1 auto; }
 }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
@@ -66,6 +67,7 @@ main.grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px;
 .photoWrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; background: #000; border-radius: var(--radius); overflow: hidden; vertical-align: top; }
 .photoWrap img { display: block; max-width: 100%; max-height: 75vh; width: auto; height: auto; }
 .photoWrap svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.mark .hit { fill: transparent; pointer-events: all; }   /* the disc inside the ring is tappable (focuses the card) */
 .mark .ring { fill: none; stroke-width: 3; }
 .mark.red .ring { stroke: var(--red); }
 .mark.amber .ring { stroke: var(--amber); }

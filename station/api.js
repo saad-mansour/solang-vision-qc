@@ -16,6 +16,7 @@ function abortError(signal) {
 
 // setTimeout that wakes up early when the caller cancels (so a cancel during the retry pause is instant)
 function sleep(ms, signal) {
+  if (signal && signal.aborted) return Promise.resolve()      // already cancelled: do not wait at all
   return new Promise(resolve => {
     const done = () => { clearTimeout(t); if (signal) signal.removeEventListener('abort', done); resolve() }
     const t = setTimeout(done, ms)
@@ -61,6 +62,7 @@ export function makeApi(cfg) {
         return await once(json, signal)
       } catch (e) {
         if (!(e.network || RETRY_STATUS.has(e.status))) throw e
+        if (e.status === 429 && /daily limit/i.test(e.message || '')) throw e   // the proxy's per-day cap: a retry only re-sends megabytes for the same answer
         await sleep(RETRY_DELAY_MS, signal)
         if (signal && signal.aborted) throw abortError(signal)
         return once(json, signal)
@@ -190,9 +192,11 @@ export function makeDb(cfg) {
     // POST /storage/v1/object/<bucket>/<path> with x-upsert (re-saving the same path overwrites) → public URL.
     // Paths are URL-safe ASCII by contract (YYYY-MM-DD/<id>/photo.jpg); segments are encoded anyway.
     async uploadPhoto(path, blob, contentType = 'image/jpeg') {
-      await call('uploadPhoto', 'POST', `${base}/storage/v1/object/${encodeURIComponent(bucket)}/${encPath(path)}`, {
-        body: blob, json: false, headers: { 'Content-Type': contentType, 'x-upsert': 'true' },
-      })
+      // no upsert: evidence photos are never overwritten (the bucket has no UPDATE policy). A 409 means this exact path
+      // was already stored by an earlier attempt whose answer got lost — that is a success for the resumable save job.
+      try {
+        await call('uploadPhoto', 'POST', `${base}/storage/v1/object/${encodeURIComponent(bucket)}/${encPath(path)}`, { body: blob, json: false, headers: { 'Content-Type': contentType } })
+      } catch (e) { if (!(e.status === 409 || /KeyAlreadyExists|already exists|Duplicate/i.test(e.message || ''))) throw e }   // storage answers HTTP 400 with an inner 409
       return db.publicUrl(path)
     },
 

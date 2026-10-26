@@ -283,7 +283,7 @@ export async function inspect(img, opts) {
     const findings = []
     for (const v of verified) {
       const type = v.vtype && v.vtype !== 'none' ? v.vtype : v.type
-      if (v.verdict === 'defect') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: v.vconfidence, level: level(v.vconfidence), severity: v.severity, why: v.vwhy, window: v.window, hits: v.hits })
+      if (v.verdict === 'defect') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: v.vconfidence, level: level(Math.max(v.vconfidence, LEVELS.amber)), severity: v.severity, why: v.vwhy, window: v.window, hits: v.hits })   // a confirmed defect is at least amber
       else if (v.verdict === 'unsure' || v.verdict === 'error') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: Math.min(0.79, v.confidence * 0.8), level: 'amber', severity: 'minor', why: 'مش متأكد — ' + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
       else if ((v.hits >= 2 && v.confidence >= 0.85) || v.confidence >= 0.9) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: 0.6, level: 'amber', severity: 'minor', why: 'شافوها بلاطتين (' + v.verdict + ') — ' + (v.vwhy || ''), window: v.window, hits: v.hits, unsure: true })
     }

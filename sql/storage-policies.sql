@@ -21,9 +21,5 @@ create policy "vision-photos insert" on storage.objects
   for insert to anon, authenticated
   with check (bucket_id = 'vision-photos');
 
-create policy "vision-photos update" on storage.objects
-  for update to anon, authenticated
-  using (bucket_id = 'vision-photos')
-  with check (bucket_id = 'vision-photos');
-
--- No DELETE policy on purpose: the public key can add evidence photos but never erase them.
+-- No UPDATE and no DELETE policy on purpose: the public key can add evidence photos but never overwrite or erase them.
+-- (An earlier version of this file created an "update" policy; the drop above removes it when you re-run the file.)

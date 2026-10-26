@@ -165,13 +165,41 @@ try {
     return 'HTTP 404'
   })
 
-  await check('OPTIONS /v1/responses → 204 with CORS headers', async () => {
+  await check('OPTIONS /v1/responses → 204 WITHOUT CORS (the proxy is same-origin only)', async () => {
     const r = await fetch(BASE + '/v1/responses', { method: 'OPTIONS' })
     ok(r.status === 204, 'HTTP ' + r.status)
-    ok(r.headers.get('access-control-allow-origin') === '*', 'no allow-origin')
-    ok(/X-Station-Token/i.test(r.headers.get('access-control-allow-headers') || ''), 'X-Station-Token not allowed')
+    ok(!r.headers.get('access-control-allow-origin'), 'allow-origin must be absent on /v1/*')
     await r.text()
-    return r.headers.get('access-control-allow-headers')
+    return 'no ACAO'
+  })
+
+  await check('POST /v1/responses from another origin → 403 (key never spent for foreign pages)', async () => {
+    const r = await fetch(BASE + '/v1/responses', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://evil.localhost:5555' }, body: JSON.stringify({ model: 'sam-3.1', input: 'x' }) })
+    ok(r.status === 403, 'HTTP ' + r.status)
+    ok(!r.headers.get('access-control-allow-origin'), 'no CORS on the refusal either')
+    return (await r.json()).error
+  })
+
+  await check('POST /v1/responses with a foreign Host → 403 (DNS rebinding)', async () => {
+    // fetch() silently drops a custom Host header, so use the raw http client
+    const { default: http } = await import('node:http')
+    const u = new URL(BASE)
+    const status = await new Promise((resolve, reject) => {
+      const req = http.request({ host: u.hostname, port: u.port, path: '/v1/responses', method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'attacker.example:80' } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)) })
+      req.on('error', reject); req.end(JSON.stringify({ model: 'sam-3.1', input: 'x' }))
+    })
+    ok(status === 403, 'HTTP ' + status)
+    return 'HTTP 403'
+  })
+
+  await check('NTFS stream spellings and the 8.3 alias of a secret → 404 (an alias of a public file still resolves)', async () => {
+    for (const p of ['/README.md::$DATA', '/README.md::%24DATA', '/meta_key.txt::$DATA', '/SUPABA~1.TXT']) {
+      const r = await fetch(BASE + p); await r.text()
+      ok(r.status === 404, p + ' → HTTP ' + r.status)
+    }
+    const r = await fetch(BASE + '/station/CONTRA~1.MD'); const t = await r.text()
+    ok(r.status === 404 || /SOLANG Vision QC/.test(t), 'alias of a public file must be 404 or the real file')
+    return '4 secret spellings refused'
   })
 
   await check('POST /v1/responses model gpt-4 → 400', async () => {

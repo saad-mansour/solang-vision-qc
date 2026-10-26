@@ -11,7 +11,7 @@
 //   MAX_BODY_MB     — max request body size in MB (default 25)
 
 const META_BASE = 'https://api.meta.ai/v1'
-const ALLOWED_PATHS = new Set(['/v1/responses', '/v1/responses/input_tokens', '/v1/chat/completions', '/v1/models'])
+const ALLOWED_PATHS = new Set(['/v1/responses'])   // the station calls nothing else; a smaller surface for a public token
 const ALLOWED_MODELS = new Set(['muse-spark-1.3', 'muse-spark-1.2', 'sam-3.1', 'muse-voice-transcribe-1.0'])
 
 const rate = new Map()   // in-memory per-isolate counter (good enough for a hackathon demo; KV would make it global)
@@ -20,13 +20,14 @@ function cors(env, req) {
   const origin = req.headers.get('Origin') || ''
   const allowed = (env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim()).filter(Boolean)
   const ok = allowed.includes('*') || allowed.includes(origin)
-  return {
-    'Access-Control-Allow-Origin': ok ? (allowed.includes('*') ? '*' : origin) : 'null',
+  const h = {
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Station-Token',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   }
+  if (ok) h['Access-Control-Allow-Origin'] = allowed.includes('*') ? '*' : origin   // a disallowed origin gets NO header ('null' would match opaque origins)
+  return h
 }
 
 function json(status, obj, extra) {

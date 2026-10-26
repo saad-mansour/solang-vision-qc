@@ -108,30 +108,33 @@ SAM call) and should be checked against current Meta pricing.
 |---|---|---|---|---|---|
 | IMG_1284 | pink pants · one leg shorter | **yes** (silhouette, 6.2 % length difference) | amber 69 % | 26.7 s | $0.066 |
 | IMG_1285 | green sweatshirt · double seam | **no** — 0 findings | — | 39.6 s | $0.091 |
-| IMG_1286 | orange sweatshirt · loose collar threads + a hole | threads **yes**; a second red spot was flagged just above the cuff seam but typed `stain`, not `hole` | red 90 % · red 85 % | 29.2 s | $0.078 |
+| IMG_1286 | orange sweatshirt · loose collar threads + a hole | threads **yes**; a second spot just above the cuff seam, typed `hole` in this run (`stain`, red 85 %, in an earlier run of the same photo — same spot, not yet checked on the garment) | red 90 % · amber 75 % | 22.3 s | $0.086 |
 | IMG_1288 | grey ribbed pants · tiny hole | **no** — 0 candidates | — | 34.5 s | $0.072 |
 | IMG_1289 | pink pants · believed clean, has a small snag | **yes** | amber 65 % | 21.4 s | $0.047 |
-| IMG_1290 | black pants · seam asymmetry | **yes** (mirror, 2 of 2 votes) | red 85 % | 38.8 s | $0.096 |
+| IMG_1290 | black pants · seam asymmetry | **yes** (mirror, 2 of 2 votes) | red 85 % | 20.1 s | $0.099 |
 | IMG_1292 | cream sweatshirt · frayed bow + faint stain | bow **yes** (global pass, `print`); stain **no** | red 85 % | 25.7 s | $0.056 |
 
 Honest reading of that table:
 
 - **Misses:** the tiny hole on the grey pants (no tile produced a candidate), the double seam on the green sweatshirt
   (one mirror vote said "different", the second did not, so no finding) and the faint stain on the cream sweatshirt.
-  Of the 9 known defects, 5 were clearly flagged, 1 is unresolved (a red spot typed `stain` on the garment where a
-  hole was expected; not yet checked against the piece), 3 were missed.
+  Of the 9 known defects, 5 were clearly flagged, 1 is unresolved (a spot above the cuff seam of the orange
+  sweatshirt, typed `hole` in one run and `stain` in another; not yet checked against the piece), 3 were missed.
 - **Extra flags:** 3 amber "hole" flags on IMG_1284 (70–75 %) that are not in the known-defect list, and 2 amber
   "unsure" flags on IMG_1290 where the verifier said *lint* but two tiles had agreed. All extra flags are amber, none
   red; they cost the inspector one tap each. In the same run the verifier dropped 2 other candidates as lint or
   texture (1 on IMG_1284, 1 on IMG_1285), so they never reached the inspector.
 - **Garment detection** worked on all 7 (SAM box confidence 0.55–0.97, mask available every time).
-- **Across the 7 photos:** 74 tiles, 109 Spark calls, 14 SAM calls, 215,723 input and 47,652 output tokens,
-  215.8 s total (average 30.8 s per garment, range 21.4–39.6 s), about $0.51 in total (average $0.07 per garment).
-  Time is dominated by the mirror step (8–20 s) and the tiles (4–11 s).
+- **Across the 7 photos:** 74 tiles, 109 Spark calls, 14 SAM calls, 215,723 input and 49,980 output tokens,
+  190 s total (average 27 s per garment, range 20.1–39.6 s), about $0.52 in total (average $0.07 per garment).
+  Five photos were run with the first, sequential version of the pipeline (21–40 s); IMG_1286 and IMG_1290 were
+  re-run after the tile/verify branch and the mirror/global branch were made concurrent (38.8 s → 20.1 s on the
+  black pants, 29.2 s → 22.3 s on the orange sweatshirt, same findings at the same spots). In the browser station
+  the same photos take 20–30 s end to end.
 
-The raw result JSONs and photos of that run live in `dev/out/` and `dev/photos/`, which are git-ignored (photos of
-unreleased garments); the fields used above are `findings[]`, `candidates`, `verified[]`, `parts.mirror.votes`,
-`garmentBox.c`, `usage` and `timings.total`.
+The raw result JSONs and the annotated JPEGs of that run are committed in [`dev/out/annotated/`](dev/out/annotated/)
+(the original photos are git-ignored); the fields used above are `findings[]`, `candidates`, `verified[]`,
+`parts.mirror.votes`, `garmentBox.c`, `usage` and `timings.total`.
 
 ## Repo layout
 
@@ -197,8 +200,10 @@ Full step-by-step guide in Arabic for the factory: [`docs/DEPLOY-ar.md`](docs/DE
 - The Meta key lives only in the Worker secret (production) or `meta_key.txt` (local); the page gets a station token.
   The proxy allow-lists models and paths, caps the body at 25 MB and applies a **per-IP daily limit** so a public demo
   link cannot drain credits.
-- The publishable Supabase key can insert and update in the demo bucket but has no DELETE policy; evidence photos
-  cannot be erased from the page.
+- The publishable Supabase key can only insert into the demo bucket (no UPDATE, no DELETE policy): evidence photos
+  cannot be overwritten or erased from the page. The demo tables themselves have RLS off (fake data, throwaway project).
+- The local dev proxy answers only same-origin requests from its own station page (no CORS on `/v1/*`, Host checked),
+  so a page from another origin cannot spend the developer's key.
 - Model output is free text; the UI builds DOM with `textContent` only, never `innerHTML`.
 
 ## Roadmap
@@ -208,7 +213,8 @@ Full step-by-step guide in Arabic for the factory: [`docs/DEPLOY-ar.md`](docs/DE
 - Recall on tiny holes and faint stains: smaller tiles or a second tile pass on dark/plain fabrics; the 3 misses above
   are all of this kind.
 - Fewer extra amber flags: use the inspector's rejections per fabric to raise the amber threshold where lint is common.
-- Speed: the mirror step is the slowest (8–20 s); run it concurrently with the tiles instead of after them.
+- Speed: the mirror/global branch already runs concurrently with the tiles; the next step is to overlap the single
+  global call with the mirror step and to skip the mirror step for garments where it never finds anything.
 - Integration with the factory's production system (order list, worker attribution to the real salary codes).
 
 ## License

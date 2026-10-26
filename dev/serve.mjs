@@ -16,6 +16,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const REAL_ROOT = fs.realpathSync(ROOT)      // on-disk spelling, to compare with realpath() of requested files
 const args = process.argv.slice(2)
 const argv = (name, def) => { const i = args.indexOf(name); return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : def }
 const PORT = parseInt(argv('--port', '8787'), 10)
@@ -44,11 +45,21 @@ const CORS = {
 let KEY = null
 try { KEY = fs.readFileSync(path.join(ROOT, 'meta_key.txt'), 'utf8').replace(/^﻿/, '').trim() || null } catch { KEY = null }
 
-function sendJson(res, status, obj, extra) {
+function sendJson(res, status, obj, extra, noCors) {
   if (res.headersSent || res.destroyed) return
   const text = JSON.stringify(obj)
-  res.writeHead(status, { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(text), ...(extra || {}) })
+  res.writeHead(status, { ...(noCors ? {} : CORS), 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(text), ...(extra || {}) })
   res.end(text)
+}
+// The /v1/* proxy spends the owner's Meta key, so only the station page served by THIS server may call it:
+// the Host must be one of our own addresses (blocks DNS rebinding) and a browser Origin, if sent, must be the same origin.
+const OWN_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`, `${HOST}:${PORT}`])
+if (HOST === '0.0.0.0') for (const list of Object.values(os.networkInterfaces())) for (const n of list) if (n.family === 'IPv4' && !n.internal) OWN_HOSTS.add(`${n.address}:${PORT}`)
+function sameOrigin(req) {
+  const host = String(req.headers.host || '').toLowerCase()
+  if (!OWN_HOSTS.has(host)) return false
+  const origin = req.headers.origin
+  return !origin || String(origin).toLowerCase() === 'http://' + host
 }
 const notFound = res => sendJson(res, 404, { error: 'not found' })
 const stat = p => fs.promises.stat(p).catch(() => null)
@@ -67,7 +78,8 @@ async function serveStatic(req, res, url) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { error: 'method not allowed' })
   let decoded
   try { decoded = decodeURIComponent(url.pathname) } catch { return sendJson(res, 400, { error: 'bad path' }) }
-  if (decoded.includes('\0') || decoded.includes('\\')) return notFound(res)
+  // ':' kills every NTFS alternate-data-stream spelling (meta_key.txt::$DATA); no legitimate repo path contains one
+  if (decoded.includes('\0') || decoded.includes('\\') || decoded.includes(':')) return notFound(res)
   const segments = decoded.split('/').filter(Boolean)
   if (segments.some(deniedSegment)) return notFound(res)
   let abs = path.join(ROOT, ...segments)
@@ -90,6 +102,13 @@ async function serveStatic(req, res, url) {
   } else if (!st.isFile()) {
     return notFound(res)
   }
+  // What Windows actually opens can differ from the requested spelling (8.3 short names such as SUPABA~1.TXT):
+  // canonicalise, make sure it is still inside the repo and re-run the deny-list on the real name, then serve THAT path.
+  let real
+  try { real = await fs.promises.realpath(abs) } catch { return notFound(res) }
+  if (real !== REAL_ROOT && !real.startsWith(REAL_ROOT + path.sep)) return notFound(res)
+  if (path.relative(REAL_ROOT, real).split(path.sep).some(deniedSegment)) return notFound(res)
+  abs = real
 
   res.writeHead(200, {
     ...CORS,
@@ -113,14 +132,15 @@ function tooLarge(req, res, declared) {
   // client reliably reads the 413 — closing early resets the connection while the client is still writing its body.
   // Unknown length or bigger than that: answer with Connection: close and cut the socket instead of swallowing it.
   const drain = declared > 0 && declared <= 4 * MAX_BODY
-  res.writeHead(413, { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(text), ...(drain ? {} : { Connection: 'close' }) })
+  res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(text), ...(drain ? {} : { Connection: 'close' }) })
   res.end(text, drain ? undefined : () => req.destroy())
 }
 
 async function proxy(req, res, url) {
-  if (!ALLOWED_PATHS.has(url.pathname)) return sendJson(res, 404, { error: 'not found' })
-  if (req.method !== 'GET' && req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' })
-  if (!KEY) return sendJson(res, 500, { error: 'meta_key.txt missing or empty — put the Meta API key in <repo>/meta_key.txt and restart the dev server' })
+  if (!sameOrigin(req)) return sendJson(res, 403, { error: 'the dev proxy only serves the station page of this server' }, null, true)
+  if (!ALLOWED_PATHS.has(url.pathname)) return sendJson(res, 404, { error: 'not found' }, null, true)
+  if (req.method !== 'GET' && req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' }, null, true)
+  if (!KEY) return sendJson(res, 500, { error: 'meta_key.txt missing or empty — put the Meta API key in <repo>/meta_key.txt and restart the dev server' }, null, true)
 
   let body
   if (req.method === 'POST') {
@@ -134,9 +154,9 @@ async function proxy(req, res, url) {
         chunks.push(chunk)
       }
     } catch { return }                                  // client went away mid-upload
-    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch { return sendJson(res, 400, { error: 'invalid json' }) }
+    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch { return sendJson(res, 400, { error: 'invalid json' }, null, true) }
     if (body && typeof body === 'object') {
-      if (body.model !== undefined && !ALLOWED_MODELS.has(body.model)) return sendJson(res, 400, { error: 'model not allowed: ' + String(body.model).slice(0, 60) })
+      if (body.model !== undefined && !ALLOWED_MODELS.has(body.model)) return sendJson(res, 400, { error: 'model not allowed: ' + String(body.model).slice(0, 60) }, null, true)
       if (body.stream) body.stream = false              // keep the proxy simple: no SSE passthrough (same as the Worker)
     }
   }
@@ -155,8 +175,7 @@ async function proxy(req, res, url) {
     })
     const text = await up.text()
     if (res.destroyed || res.writableEnded) return
-    res.writeHead(up.status, {
-      ...CORS,
+    res.writeHead(up.status, {                        // same-origin only: no CORS headers on proxy answers
       'Content-Type': up.headers.get('content-type') || 'application/json',
       'Content-Length': Buffer.byteLength(text),
       'Cache-Control': 'no-store',
@@ -164,7 +183,7 @@ async function proxy(req, res, url) {
     res.end(text)
   } catch (e) {
     if (res.destroyed || res.writableEnded) return     // the client cancelled: nobody to answer
-    sendJson(res, 502, { error: 'upstream: ' + (ac.signal.aborted ? 'timeout' : ((e && e.message) || String(e))) })
+    sendJson(res, 502, { error: 'upstream: ' + (ac.signal.aborted ? 'timeout' : ((e && e.message) || String(e))) }, null, true)
   } finally {
     clearTimeout(timer)
     res.off('close', onClose)
@@ -189,7 +208,7 @@ const server = http.createServer((req, res) => {
   res.on('finish', logLine)
   res.on('close', logLine)
 
-  if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end() }
+  if (req.method === 'OPTIONS') { res.writeHead(204, url.pathname.startsWith('/v1/') ? {} : CORS); return res.end() }   // no CORS for the proxy
   if (url.pathname === '/health') return sendJson(res, 200, { ok: true, mode: 'dev', key: KEY ? 'loaded' : 'missing' })
   if (url.pathname.startsWith('/v1/')) return void proxy(req, res, url)
   serveStatic(req, res, url).catch(() => sendJson(res, 500, { error: 'server error' }))

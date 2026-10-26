@@ -15,7 +15,7 @@ const SIDE_AR = { front: 'وجه', back: 'ضهر' }
 const PILL = { idle: 'جاهزة', moving: 'في حركة', settling: 'ثابتة…', still: '📸 لقطة!', cooldown: 'جاهزة', same: 'نفس القطعة' }
 const SAMPLE_W = 64, SAMPLE_H = 48           // detector sample size (matches StillnessDetector defaults)
 const SVG_NS = 'http://www.w3.org/2000/svg'
-const BIG_PHOTO = 12 * 1024 * 1024           // above this the original is re-encoded at q0.85 before upload
+const BIG_PHOTO = 30 * 1024 * 1024           // JPEG originals are uploaded as-is below this (a 24 MP phone JPEG is 5–7 MB); only non-JPEG picks are re-encoded
 
 // ── state ────────────────────────────────────────────────────────────────────
 const S = {
@@ -26,8 +26,11 @@ const S = {
   running: false, controller: null, runStarted: 0, timer: null, warns: [], tilesDone: 0,
   img: null, blob: null, res: null, findings: [], decision: null,
   job: null,                                   // the save job of the current inspection (resumable on retry)
+  detached: [],                                // save jobs of previous pieces that are still running or failed (retry from the banner)
+  incomplete: null,                            // set when model calls failed during the run: the result must not read as «clean»
   pending: null,                               // tap point waiting for a type in the picker
-  history: [],
+  history: [], histSeq: 0,
+  camStarting: false, wakeLock: null,
 }
 
 // ── tiny DOM helpers ─────────────────────────────────────────────────────────
@@ -51,7 +54,19 @@ function toast(m, ms = 2400) {
   toastT = { t: now, m }; const t = $('toast'); t.textContent = m; t.hidden = false
   clearTimeout(toast._h); toast._h = setTimeout(() => { t.hidden = true }, ms)
 }
-function banner(text) { const b = $('banner'); b.appendChild(el('div', null, text)); b.hidden = false }
+function banner(text, btnText, fn) {
+  const b = $('banner'), row = el('div', null, text)
+  if (btnText && fn) {
+    const btn = el('button', 'btn small', btnText); btn.type = 'button'
+    btn.addEventListener('click', () => { row.remove(); if (!b.children.length) b.hidden = true; fn() })
+    row.appendChild(document.createTextNode(' ')); row.appendChild(btn)
+  }
+  b.appendChild(row); b.hidden = false
+}
+// keep the tablet awake while the station is open (hands-free use); re-acquired when the tab becomes visible again
+async function requestWakeLock() {
+  try { if (navigator.wakeLock && document.visibilityState === 'visible') S.wakeLock = await navigator.wakeLock.request('screen') } catch (e) { /* unsupported or denied */ }
+}
 
 // ── init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -70,6 +85,7 @@ async function init() {
     refreshStats(); loadHistory()
   }
   startCamera()
+  requestWakeLock(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') requestWakeLock() })
 }
 
 function wire() {
@@ -116,17 +132,21 @@ function stopCamera() {
 }
 
 async function startCamera() {
+  if (S.camStarting) return                    // a double tap on «🔄 كاميرا» must not open two streams
+  S.camStarting = true
   stopCamera()
   const video = $('video')
   try {
     S.cam = await openCamera(video, { facing: S.facing })
   } catch (e) {
     // desktop / no permission: hide the pill, keep the file button usable
-    S.cam = null; $('pill').hidden = true; $('btnShoot').disabled = true; $('btnFlip').disabled = true
+    S.cam = null; S.camStarting = false; $('pill').hidden = true; $('btnShoot').disabled = true; $('btnFlip').disabled = true
     const m = $('camMsg'); m.textContent = 'الكاميرا ما اشتغلت على هالجهاز — استعمل «📁 صورة من الجهاز». (' + msg(e) + ')'; m.hidden = false
     return
   }
+  S.camStarting = false
   $('pill').hidden = false; $('btnShoot').disabled = false; $('btnFlip').disabled = false; $('camMsg').hidden = true
+  S.cam.onLost = cameraLost
   S.det = new StillnessDetector()
   S.det.onStill = () => { if (S.autoCapture && S.view === 'camera' && !S.running && !S.capturing) captureFromCamera('تلقائي') }
   S.sampleCanvas = S.sampleCanvas || document.createElement('canvas')
@@ -134,9 +154,20 @@ async function startCamera() {
   S.loop = setInterval(sampleTick, 125)        // ~8 fps is plenty for a hands-left-the-frame detector
 }
 
+// the track ended (OS took the camera, screen lock, another app): say so instead of silently re-shooting the frozen frame
+function cameraLost() {
+  if (!S.cam) return
+  stopCamera(); $('pill').hidden = true; $('btnShoot').disabled = true
+  const m = $('camMsg'); clear(m); m.appendChild(el('span', null, 'الكاميرا وقفت — '))
+  const b = el('button', 'btn small', '🔄 عيد تشغيل الكاميرا'); b.type = 'button'; b.addEventListener('click', startCamera); m.appendChild(b); m.hidden = false
+}
+
 function sampleTick() {
   const video = $('video')
   if (!S.cam || !S.det || video.readyState < 2) return
+  if (S.cam.track && S.cam.track.readyState !== 'live') { cameraLost(); return }
+  // paused while a piece is being inspected: on return the detector sees a swapped garment as a motion burst and the same one as «نفس القطعة»
+  if (S.view !== 'camera' || S.running || S.capturing) return
   try {
     const gray = grayscaleSample(video, S.sampleCanvas, SAMPLE_W, SAMPLE_H)
     const r = S.det.feed(gray, SAMPLE_W, SAMPLE_H, performance.now())
@@ -196,17 +227,36 @@ async function runInspection(blob, sourceLabel) {
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress('انلغى الفحص'); return }
     S.res = res
-    S.findings = (res.findings || []).map((f) => ({ ...f, verdict: null, worker_name: null, stage: null }))
+    S.findings = (res.findings || []).map((f) => ({ ...f, verdict: null, worker_name: null, stage: null, window: f.window || globalWindow(f, res) }))
+    // model calls that failed (proxy limit, 401, offline…) must not read as «nothing suspicious»
+    const failed = S.warns.filter((w) => ['garment', 'tile', 'parts', 'global'].includes(w.stage))
+    S.incomplete = failed.length ? { failed: failed.length, tilesFailed: failed.filter((w) => w.stage === 'tile').length, tiles: res.tiles || 0 } : null
     renderAll(); showCost(res)
-    setProgress(S.findings.length ? `خلص — ${S.findings.length} نقطة للمراجعة` : 'خلص — ما لقيت شي مشبوه')
+    if (S.incomplete) {
+      setProgress(`الفحص ما كمل — ${S.incomplete.tilesFailed}/${S.incomplete.tiles} بلاطة ما انفحصت`)
+      $('runErrorText').textContent = `${S.incomplete.failed} طلب للموديل فشل — ما تعتمد على «ما لقيت شي»:\n` + [...new Set(failed.map((w) => `${w.stage}: ${w.error}`))].slice(0, 8).join('\n')
+      $('runError').hidden = false
+    } else setProgress(S.findings.length ? `خلص — ${S.findings.length} نقطة للمراجعة` : 'خلص — ما لقيت شي مشبوه')
   } catch (e) {
     if (controller.signal.aborted) setProgress('انلغى الفحص')
     else { setProgress('وقف الفحص'); $('runErrorText').textContent = msg(e) + (e && e.stack && !String(e.stack).startsWith(msg(e)) ? '\n' + e.stack : ''); $('runError').hidden = false }
   } finally {
     stopTimer(); S.running = false; S.controller = null; $('btnCancel').hidden = true
-    // cards are refreshed here (after running=false) so a cancel / error shows «ما في نتيجة…» instead of a stale «عم فحص…»
-    if (S.view === 'inspect' && S.img) { renderCards(); $('decisionBar').hidden = false; updateSaveEnabled() }
+    // cards are refreshed here (after running=false) so a cancel / error / undecodable photo shows a way out instead of a stale «عم فحص…»
+    if (S.view === 'inspect') { renderCards(); $('decisionBar').hidden = false; updateSaveEnabled(); $('tapHint').hidden = !S.img }
   }
+}
+
+// silhouette / mirror / global findings need the whole garment (or both compared parts) in their crop, not a 500 px patch
+function globalWindow(f, res) {
+  if (f.kind !== 'global') return null
+  const bx = res.parts && res.parts.boxes
+  if (f.source === 'mirror' && bx && bx.length === 2) {
+    const x1 = Math.min(bx[0].x1, bx[1].x1), y1 = Math.min(bx[0].y1, bx[1].y1), x2 = Math.max(bx[0].x2, bx[1].x2), y2 = Math.max(bx[0].y2, bx[1].y2)
+    return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
+  }
+  const g = res.garmentBox
+  return g ? { x: g.x, y: g.y, w: g.w, h: g.h } : null
 }
 
 function showPhoto(url, w, h) {
@@ -262,6 +312,7 @@ function renderOverlay() {
 
 function markGroup(f, i, r) {
   const g = svgEl('g', { class: 'mark ' + colorClass(f) + (f.verdict ? ' v-' + f.verdict : '') })
+  g.appendChild(svgEl('circle', { cx: f.x, cy: f.y, r, class: 'hit' }))      // invisible filled disc: a tap inside the ring focuses the card
   const ring = { cx: f.x, cy: f.y, r, class: 'ring', 'vector-effect': 'non-scaling-stroke' }
   if (f.kind === 'global') ring['stroke-dasharray'] = `${r * 0.35} ${r * 0.2}`
   g.appendChild(svgEl('circle', ring))
@@ -287,8 +338,10 @@ function focusCard(i) {
 function onOverlayTap(ev) {
   if (S.view !== 'inspect' || !S.img) return
   if (S.running) { toast('استنّي يخلص الفحص'); return }
-  if (S.job && S.job.done) { toast('انحفظ هالفحص — افحص قطعة جديدة لتعدّل'); return }
+  if (S.job) { toast(S.job.done ? 'انحفظ هالفحص — افحص قطعة جديدة لتعدّل' : 'عم يحفظ — ما فيك تعدّل النقاط هلق'); return }
+  if (S.pending) closePicker()                                  // a second tap while the picker is open just moves the mark
   const svg = $('overlay'); let pt
+  const box = svg.getBoundingClientRect(); if (!box.width || !box.height) return
   try { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(svg.getScreenCTM().inverse()); pt = { x: Math.round(q.x), y: Math.round(q.y) } }
   catch (e) { const b = svg.getBoundingClientRect(); pt = { x: Math.round((ev.clientX - b.left) / b.width * S.img.width), y: Math.round((ev.clientY - b.top) / b.height * S.img.height) } }
   pt.x = Math.max(0, Math.min(pt.x, S.img.width - 1)); pt.y = Math.max(0, Math.min(pt.y, S.img.height - 1))
@@ -309,11 +362,14 @@ function pickType(type) {
 function renderAll() { renderOverlay(); renderCards(); updateSaveEnabled() }
 
 function renderCards() {
-  const box = $('findings'); clear(box); box.classList.toggle('locked', !!(S.job && S.job.done))
+  const box = $('findings'); clear(box); box.classList.toggle('locked', !!S.job)   // frozen as soon as a save job exists (busy, failed or done)
   $('findingsCount').textContent = S.findings.length ? String(S.findings.length) : ''
   if (S.view === 'camera') { box.appendChild(el('div', 'empty', 'حطّ القطعة تحت الكاميرا وشيل إيديك — أو اختار صورة من الجهاز')); return }
   if (S.view === 'history') return
-  if (!S.findings.length) { box.appendChild(el('div', 'empty', S.res ? 'ما لقيت شي مشبوه 👍 — كبس عالصورة إذا شفت عيب' : (S.running ? 'عم فحص…' : 'ما في نتيجة — كبس عالصورة إذا شفت عيب، أو افحص قطعة جديدة'))); return }
+  if (!S.findings.length) {
+    const t = S.running ? 'عم فحص…' : !S.img ? 'ما قدرت أفتح الصورة — افحص قطعة جديدة' : S.incomplete ? 'الفحص ما كمل — ما تعتمد على النتيجة، افحص القطعة من جديد' : S.res ? 'ما لقيت شي مشبوه 👍 — كبس عالصورة إذا شفت عيب' : 'ما في نتيجة — كبس عالصورة إذا شفت عيب، أو افحص قطعة جديدة'
+    box.appendChild(el('div', 'empty', t)); return
+  }
   S.findings.forEach((f, i) => box.appendChild(buildCard(f, i)))
 }
 
@@ -350,6 +406,7 @@ function buildCard(f, i) {
   }
   if (f.verdict === 'confirmed' || f.verdict === 'added') foot.appendChild(workerSelect(f))
   card.appendChild(foot)
+  if (S.job) card.querySelectorAll('button, select').forEach((c) => { c.disabled = true })   // real disable, not only pointer-events (keyboard too)
   return card
 }
 
@@ -387,7 +444,7 @@ function cropUrl(f, img) { return cropBlob(f, img).then((b) => { if (!b) return 
 
 // ── decision + save ──────────────────────────────────────────────────────────
 function setDecision(dec) {
-  if (S.job && S.job.done) { toast('انحفظ هالفحص — افحص قطعة جديدة'); return }
+  if (S.job) { toast(S.job.done ? 'انحفظ هالفحص — افحص قطعة جديدة' : 'عم يحفظ — القرار متثبّت'); return }
   S.decision = dec
   document.querySelectorAll('.btn.dec').forEach((b) => b.classList.toggle('active', b.dataset.dec === dec))
   updateSaveEnabled()
@@ -397,6 +454,7 @@ function updateSaveEnabled() {
   b.disabled = !S.decision || !S.img || !S.db || !!done || !!busy
   b.textContent = done ? '✓ انحفظ' : busy ? 'عم يحفظ…' : '💾 حفظ'
   b.classList.toggle('busy', !!busy)
+  document.querySelectorAll('.btn.dec').forEach((d) => { d.disabled = !!S.job })
   if (!S.db && S.img) $('saveStatus').textContent = 'ما في اتصال بالقاعدة (config.js) — الحفظ معطّل'
 }
 function saveStatus(t, cls) { const s = $('saveStatus'); s.textContent = t; s.className = 'status' + (cls ? ' ' + cls : '') }
@@ -404,58 +462,64 @@ function saveStatus(t, cls) { const s = $('saveStatus'); s.textContent = t; s.cl
 function saveInspection() {
   if (!S.decision || !S.img || !S.db) return
   if (S.job && (S.job.busy || S.job.done)) return
-  if (!S.job) S.job = { busy: false, done: false, img: S.img, blob: S.blob, res: S.res, findings: S.findings, order: S.order, side: S.side, inspector: S.inspector, id: null, date: null, paths: {}, crops: {}, prep: null, patched: false, findingIds: null, examples: false, closeAfter: false }
-  S.job.decision = S.decision                                   // the decision may change between a failed attempt and a retry
+  // the job takes a SNAPSHOT of the list and the cards are frozen from now on: a retry writes exactly what the inspector saw
+  if (!S.job) S.job = { busy: false, done: false, img: S.img, blob: S.blob, res: S.res, findings: S.findings.slice(), order: S.order, side: S.side, inspector: S.inspector, decision: S.decision, incomplete: S.incomplete, id: null, date: null, paths: {}, prep: null, patched: false, findingIds: null, examples: false, closeAfter: false, photoScaled: false }
+  renderCards(); updateSaveEnabled()
   runSave(S.job)
 }
 
 // Resumable: every step is skipped once it succeeded, so «🔁 حاول الحفظ مرة تانية» continues where it stopped. Nothing here blocks the UI.
+// Crops are tied to the finding objects (f._cropPath), never to a position in a list.
 async function runSave(job) {
-  job.busy = true; updateSaveEnabled(); $('btnRetry').hidden = true
+  job.busy = true; if (S.job === job) { updateSaveEnabled(); $('btnRetry').hidden = true }
   const db = S.db, n = job.findings.length
+  const st = (t, cls) => { if (S.job === job) saveStatus(t, cls) }   // a job detached by «قطعة جديدة» never writes into the next inspection's status
   try {
-    if (!job.prep) { saveStatus('عم جهّز الصور…'); job.prep = await prepareBlobs(job) }
+    if (!job.prep) { st('عم جهّز الصور…'); job.prep = await prepareBlobs(job) }
     if (!job.id) {
-      saveStatus('عم سجّل الفحص…')
+      st('عم سجّل الفحص…')
       const r0 = await db.insertInspection(inspectionRow(job)); const r = Array.isArray(r0) ? r0[0] : r0
       if (!r || r.id == null) throw new Error('القاعدة ما رجّعت رقم الفحص')
       job.id = r.id; job.date = ymd(r.created_at ? new Date(r.created_at) : new Date())
     }
     const base = `${job.date}/${job.id}/`
-    if (!job.paths.photo) { saveStatus('عم رفع الصورة…'); await db.uploadPhoto(base + 'photo.jpg', job.prep.photo); job.paths.photo = base + 'photo.jpg' }
-    if (!job.paths.annotated && job.prep.annotated) { saveStatus('عم رفع الصورة المعلّمة…'); await db.uploadPhoto(base + 'annotated.jpg', job.prep.annotated); job.paths.annotated = base + 'annotated.jpg' }
+    if (!job.paths.photo) { st('عم رفع الصورة…'); await db.uploadPhoto(base + 'photo.jpg', job.prep.photo); job.paths.photo = base + 'photo.jpg' }
+    if (!job.paths.annotated && job.prep.annotated) { st('عم رفع الصورة المعلّمة…'); await db.uploadPhoto(base + 'annotated.jpg', job.prep.annotated); job.paths.annotated = base + 'annotated.jpg' }
     for (let i = 0; i < n; i++) {
-      if (job.crops[i] || !job.prep.crops[i]) continue
-      saveStatus(`عم رفع القصّات ${i + 1}/${n}…`)
-      const p = base + `crop-${i + 1}.jpg`; await db.uploadPhoto(p, job.prep.crops[i]); job.crops[i] = p
+      const f = job.findings[i]
+      if (f._cropPath || !job.prep.crops[i]) continue
+      st(`عم رفع القصّات ${i + 1}/${n}…`)
+      const p = base + `crop-${i + 1}.jpg`; await db.uploadPhoto(p, job.prep.crops[i]); f._cropPath = p
     }
     if (!job.patched) { await db.updateInspection(job.id, { photo_path: job.paths.photo, annotated_path: job.paths.annotated || null, decision: job.decision }); job.patched = true }
     if (!job.findingIds) {
-      saveStatus('عم سجّل النقاط…')
-      const rows = job.findings.map((f, i) => findingRow(job, f, i))
+      st('عم سجّل النقاط…')
+      const rows = job.findings.map((f) => findingRow(job, f))
       const ins = rows.length ? await db.insertFindings(rows) : []
       job.findingIds = (Array.isArray(ins) ? ins : []).map((r) => r.id)
     }
     if (!job.examples) {
-      saveStatus('عم سجّل الأمثلة…')
+      st('عم سجّل الأمثلة…')
       const ex = []
       job.findings.forEach((f, i) => {
-        if (!f.verdict || !job.crops[i]) return                 // vision_examples.crop_path is NOT NULL
-        ex.push({ finding_id: job.findingIds[i] == null ? null : job.findingIds[i], model_code: job.order ? job.order.model_code : null, type: f.type || 'other', label: f.verdict === 'rejected' ? 'not_defect' : 'defect', crop_path: job.crops[i], note: f.why || null })
+        if (!f.verdict || !f._cropPath) return                  // vision_examples.crop_path is NOT NULL
+        ex.push({ finding_id: job.findingIds[i] == null ? null : job.findingIds[i], model_code: job.order ? job.order.model_code : null, type: f.type || 'other', label: f.verdict === 'rejected' ? 'not_defect' : 'defect', crop_path: f._cropPath, note: f.why || null })
       })
       if (ex.length) await db.insertExamples(ex)
       job.examples = true
     }
-    job.done = true; saveStatus('✓ انحفظ', 'ok')
-    if (S.job === job) { renderCards(); updateSaveEnabled() }
+    job.done = true; st('✓ انحفظ', 'ok')
+    S.detached = S.detached.filter((j) => j !== job)
+    if (S.job === job) { renderCards(); updateSaveEnabled() } else toast(`✓ انحفظ فحص القطعة السابقة${job.id ? ' (#' + job.id + ')' : ''}`)
     refreshStats(); loadHistory()
   } catch (e) {
-    saveStatus('ما انحفظ: ' + msg(e), 'bad')
+    st('ما انحفظ: ' + msg(e), 'bad')
     if (S.job === job) $('btnRetry').hidden = false
+    else banner(`فحص القطعة السابقة${job.id ? ' (#' + job.id + ')' : ''} ما خلص حفظو: ${msg(e)}`, '🔁 حاول مرة تانية', () => runSave(job))
   } finally {
     job.busy = false
     if (S.job === job) updateSaveEnabled()
-    if (job.closeAfter) safeClose(job.img)                     // the inspector already moved to a new piece
+    if (job.closeAfter && job.done) safeClose(job.img)         // the inspector already moved on; a failed detached job keeps its bitmap for the retry
   }
 }
 
@@ -463,7 +527,11 @@ async function runSave(job) {
 async function prepareBlobs(job) {
   const { img, blob } = job
   const full = { x: 0, y: 0, w: img.width, h: img.height }
-  const photo = (blob.size > BIG_PHOTO) ? await img.blob({ ...full, quality: 0.85 }) : (blob.type && blob.type !== 'image/jpeg') ? await img.blob({ ...full, quality: 0.92 }) : blob
+  // the original JPEG is stored untouched (its pixels are what x/y refer to); a HEIC/PNG pick or an oversized file is re-encoded,
+  // which the image adapter caps at 4096 px — that case is flagged in result.photo_scaled
+  const reencode = (blob.type && blob.type !== 'image/jpeg') || blob.size > BIG_PHOTO
+  const photo = reencode ? await img.blob({ ...full, quality: 0.9 }) : blob
+  job.photoScaled = reencode
   let annotated = null
   try { annotated = await renderAnnotated(job) } catch (e) { /* optional */ }
   const crops = []
@@ -497,16 +565,18 @@ function inspectionRow(job) {
   return {
     station: S.cfg.STATION || 'final-qc-1', inspector: job.inspector || null,
     order_number: o.order_number || null, model_code: o.model_code || null, garment: o.garment || 'garment', side: job.side,
-    width: job.img.width, height: job.img.height, garment_box: (res && res.garmentBox) || null, result: res || null,
-    n_red: job.findings.filter((f) => f.level === 'red').length, n_amber: job.findings.filter((f) => f.level === 'amber').length,
+    width: job.img.width, height: job.img.height, garment_box: (res && res.garmentBox) || null,
+    result: res ? { ...res, photo_scaled: job.photoScaled || undefined, incomplete: job.incomplete || undefined } : null,
+    // what the CAMERA flagged (inspector-added spots are not camera reds)
+    n_red: job.findings.filter((f) => f.level === 'red' && f.source !== 'inspector').length, n_amber: job.findings.filter((f) => f.level === 'amber' && f.source !== 'inspector').length,
     decision: job.decision, duration_ms: t.total == null ? null : Math.round(t.total), input_tokens: u.input_tokens || 0, output_tokens: u.output_tokens || 0,
   }
 }
-function findingRow(job, f, i) {
+function findingRow(job, f) {
   return {
     inspection_id: job.id, kind: f.kind || 'local', source: f.source || 'tiles', type: f.type || 'other', x: Math.round(f.x), y: Math.round(f.y),
-    confidence: Math.round((+f.confidence || 0) * 1000) / 1000, level: f.level || null, severity: f.severity || null, why: f.why || null,
-    crop_path: job.crops[i] || null, verdict: f.verdict || null, verdict_by: f.verdict ? (job.inspector || null) : null,
+    confidence: Math.round(Math.min(1, +f.confidence || 0) * 1000) / 1000, level: f.level || null, severity: f.severity || null, why: f.why || null,
+    crop_path: f._cropPath || null, verdict: f.verdict || null, verdict_by: f.verdict ? (job.inspector || null) : null,
     verdict_at: f.verdict ? (f.verdict_at || new Date().toISOString()) : null, worker_name: f.worker_name || null, stage: f.stage || null,
   }
 }
@@ -515,8 +585,9 @@ function findingRow(job, f, i) {
 function resetInspection() {
   closePicker()
   S.findings.forEach((f) => { if (f._cropUrl) { try { URL.revokeObjectURL(f._cropUrl) } catch (e) { /* ignore */ } f._cropUrl = null } })
-  if (S.job && S.job.busy) S.job.closeAfter = true; else safeClose(S.img)      // uploads in flight already hold their blobs
-  S.img = null; S.blob = null; S.res = null; S.findings = []; S.decision = null; S.job = null; S.warns = []
+  // a save that is still running or waiting for a retry stays alive (detached) and keeps its bitmap until it is done
+  if (S.job && !S.job.done) { S.job.closeAfter = true; if (!S.detached.includes(S.job)) S.detached.push(S.job) } else safeClose(S.img)
+  S.img = null; S.blob = null; S.res = null; S.findings = []; S.decision = null; S.job = null; S.warns = []; S.incomplete = null
   $('photo').removeAttribute('src'); clear($('overlay'))
   document.querySelectorAll('.btn.dec').forEach((b) => b.classList.remove('active'))
   saveStatus(''); $('btnRetry').hidden = true; $('runError').hidden = true; $('costLine').textContent = ''
@@ -524,9 +595,10 @@ function resetInspection() {
 }
 function newPiece() {
   if (S.running) { toast('في فحص شغّال — استنّي يخلص أو ألغيه'); return }
-  if (S.img && S.view === 'inspect' && !(S.job && (S.job.done || S.job.busy)) && !confirm('هالفحص ما انحفظ — تتركو؟')) return
+  if (S.img && S.view === 'inspect' && !S.job && !confirm('هالفحص ما انحفظ — تتركو؟')) return
   resetInspection(); setView('camera'); renderCards()
-  if (S.det) S.det.reset()
+  // no detector reset here: it remembers the last captured scene, so the same garment is not re-shot and a swapped one
+  // (even one already lying still) is seen as a motion burst when sampling resumes
 }
 
 // ── history strip + read-only view ───────────────────────────────────────────
@@ -551,15 +623,16 @@ async function loadHistory() {
 
 async function openHistory(h) {
   if (S.running) { toast('في فحص شغّال — استنّي يخلص'); return }
-  if (S.img && S.view === 'inspect' && !(S.job && (S.job.done || S.job.busy)) && !confirm('هالفحص ما انحفظ — تتركو؟')) return
+  if (S.img && S.view === 'inspect' && !S.job && !confirm('هالفحص ما انحفظ — تتركو؟')) return
   resetInspection(); setView('history')
+  const seq = ++S.histSeq                                        // a later tap on another thumbnail invalidates this one
   $('viewTitle').textContent = `فحص #${h.id} · ${h.order_number || ''} · ${SIDE_AR[h.side] || ''} · ${DEC_EMOJI[h.decision] || ''} ${DEC_AR[h.decision] || 'بلا قرار'} · ${h.inspector || ''} · ${hhmm(h.created_at)}`
   const p = h.annotated_path || h.photo_path
   clear($('overlay')); $('photo').src = p ? S.db.publicUrl(p) : ''
-  const box = $('findings'); clear(box); box.appendChild(el('div', 'empty', 'عم جيب النقاط…'))
+  const box = $('findings'); clear(box); $('findingsCount').textContent = ''; box.appendChild(el('div', 'empty', 'عم جيب النقاط…'))
   let rows = []
-  try { rows = (await S.db.findingsFor(h.id)) || [] } catch (e) { clear(box); box.appendChild(el('div', 'empty', 'ما قدرت جيب النقاط: ' + msg(e))); return }
-  if (S.view !== 'history') return
+  try { rows = (await S.db.findingsFor(h.id)) || [] } catch (e) { if (seq === S.histSeq && S.view === 'history') { clear(box); box.appendChild(el('div', 'empty', 'ما قدرت جيب النقاط: ' + msg(e))) } return }
+  if (S.view !== 'history' || seq !== S.histSeq) return
   clear(box); $('findingsCount').textContent = rows.length ? String(rows.length) : ''
   if (!rows.length) { box.appendChild(el('div', 'empty', 'ما كان في نقاط')); return }
   rows.forEach((f, i) => {

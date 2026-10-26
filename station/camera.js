@@ -35,11 +35,15 @@ export async function openCamera(videoEl, { facing = 'environment', idealWidth =
   }
   const settings = safe(() => track.getSettings(), {})
   const capabilities = safe(() => track.getCapabilities(), {})
-  return {
+  const cam = {
     stream, track, settings, capabilities,
     facing: settings.facingMode || facing,
+    onLost: null,                                   // set by the app: called once when the track ends (OS took the camera, screen lock…)
+    live() { return track.readyState === 'live' && !track.muted },
     stop() { stopStream(stream); if (videoEl.srcObject === stream) videoEl.srcObject = null },
   }
+  track.addEventListener('ended', () => { if (cam.onLost) cam.onLost('ended') })
+  return cam
 }
 
 /**
@@ -49,6 +53,11 @@ export async function openCamera(videoEl, { facing = 'environment', idealWidth =
  */
 export async function takePhoto(cam, videoEl) {
   const track = cam && cam.track
+  // A dead or paused camera must fail loudly: a frame grab would silently re-inspect the frozen preview (the PREVIOUS garment).
+  if (cam) {
+    const live = track && track.readyState === 'live' && !track.muted && !(videoEl && (videoEl.paused || videoEl.ended))
+    if (!live) { const e = new Error('الكاميرا وقفت — عيد تشغيلها'); e.name = 'CameraLostError'; throw e }
+  }
   if (track && track.readyState === 'live' && typeof ImageCapture === 'function') {
     try {
       const blob = await withTimeout(captureViaImageCapture(track), 4000)
