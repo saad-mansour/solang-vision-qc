@@ -182,12 +182,15 @@ node summarize.mjs                  # re-print saved results from out/annotated/
 
 Full step-by-step guide in Arabic for the factory: [`docs/DEPLOY-ar.md`](docs/DEPLOY-ar.md). Short version:
 
-**One link (recommended):** [`_worker.js`](_worker.js) at the repo root is a Cloudflare Pages "advanced mode" worker:
-it proxies `/v1/responses` to the Meta API with the key kept as a Pages secret and serves everything else from the
-deployed files. Connect the GitHub repo to Cloudflare Pages (framework `None`, no build command, output directory `/`),
-add the secret `META_API_KEY` (optional `STATION_TOKEN`, `DAILY_LIMIT`), redeploy. The station is then at
-`https://<project>.pages.dev/station/` and `station/config.js` keeps `PROXY_URL: ''` (same origin), exactly as in
-local development. Local check of the same setup: `npx wrangler pages dev . --port 8788` with the key in `.dev.vars`.
+**One link (how the demo is deployed):** [`_worker.js`](_worker.js) + the root [`wrangler.toml`](wrangler.toml)
+make the repo a Cloudflare Worker with static assets: `/v1/responses` is proxied to the Meta API with the key kept as a
+Worker secret, everything else is served from the repo files ([`.assetsignore`](.assetsignore) keeps dev scratch out).
+In the Cloudflare dashboard: Workers & Pages → Create → Import a repository → pick the repo → Deploy; then Settings →
+**Runtime variables and secrets** → add `META_API_KEY` as a Secret (optional `STATION_TOKEN`). Every push to `main`
+redeploys. The station is at `https://<project>.<account>.workers.dev/station/` and `station/config.js` keeps
+`PROXY_URL: ''` (same origin), exactly as in local development. Live demo:
+<https://solang-vision-qc.saadmansour.workers.dev/station/>. Local check of the same setup: `npx wrangler dev` (or
+`npx wrangler pages dev . --port 8788`) with the key in `.dev.vars`.
 
 **Separate worker (alternative):** [`worker/src/index.js`](worker/src/index.js) with
 [`worker/wrangler.toml`](worker/wrangler.toml); then set `PROXY_URL` in `station/config.js` to the worker URL.

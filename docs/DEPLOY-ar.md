@@ -19,32 +19,33 @@
 
 ---
 
-## الطريقة الأسهل — لينك واحد على Cloudflare Pages (الموصى فيها)
+## الطريقة الأسهل — لينك واحد: Worker من GitHub (هيك انعمل النشر الفعلي بـ26/10/2026)
 
-الوسيط صار جوّا المستودع نفسو بملف اسمو `_worker.js`، فما في داعي تعمل Worker منفصل. مشروع Pages واحد بيعطيك
-الصفحة والوسيط سوا على نفس اللينك، والمفتاح بيتحط كسرّ بإعدادات المشروع. وكل ما ينرفع تعديل عـGitHub بيتحدّث الموقع لحالو.
+الوسيط صار جوّا المستودع نفسو بملف اسمو `_worker.js`، وملف `wrangler.toml` بجذر المستودع بيقول لـCloudflare: شغّل هالملف
+وقدّم باقي الملفات كموقع ثابت. مشروع واحد بيعطيك الصفحة والوسيط على نفس اللينك، والمفتاح بيتحط كسرّ بإعدادات المشروع.
+وكل ما ينرفع تعديل عـGitHub بيتحدّث الموقع لحالو خلال دقيقة.
 
 **مهم:** هالمشروع جديد ومنفصل تماماً عن مشروع المصنع الموجود بنفس الحساب. ما بتفوت على مشروع المصنع ولا بتغيّر فيه شي.
 
-1. افتح `dash.cloudflare.com` ← من القائمة اليسار «Workers & Pages» ← زر «Create» ← تبويب «Pages» ← «Connect to Git».
+1. افتح `dash.cloudflare.com` ← من القائمة اليسار «Workers & Pages» ← زر «Create» ← «Import a repository» (أو «Connect to Git»).
 2. اختار GitHub وسجّل دخول إذا طلب. لما يسألك عن المستودعات، اختار «Only select repositories» وعلّم `solang-vision-qc` بس ← «Install & Authorize».
-3. اختار المستودع `saad-mansour/solang-vision-qc` ← «Begin setup».
-4. بصفحة الإعداد:
-   - «Project name»: `solang-vision-qc` (هيدا بيصير اللينك: `https://solang-vision-qc.pages.dev`).
-   - «Production branch»: `main`.
-   - «Framework preset»: `None`.
-   - «Build command»: خلّيها فاضية.
-   - «Build output directory»: `/` (شرطة مايلة وحدة بس).
-   - ما تضيف متغيرات هون، منضيفها بعد أول نشر.
-   - «Save and Deploy». انطر دقيقة لحد ما يكتب «Success».
-5. المفتاح: افتح المشروع ← «Settings» ← «Variables and Secrets» ← «Add»:
-   - الاسم `META_API_KEY`، النوع **Secret**، القيمة: الصق مفتاح Meta من ملف `meta_key.txt` (انسخو من الملف مباشرة، ما تبعتو لحدا). «Save».
-   - (اختياري) `DAILY_LIMIT` نوع Text قيمة `400`.
-6. لازم يعاد النشر لحتى يقرا السرّ: «Deployments» ← جنب آخر نشر زر «⋯» ← «Retry deployment». انطر لحد «Success».
-7. جرّب: افتح `https://solang-vision-qc.pages.dev/health` ← لازم يطلع `"key":"set"`. بعدها افتح
-   `https://solang-vision-qc.pages.dev/station/` من موبايلك، اسمح للكاميرا، وجرّب قطعة.
+3. اكبس على `solang-vision-qc` بقائمة المستودعات ← «Next».
+4. بصفحة «Set up your application»: «Project name» `solang-vision-qc`، «Build command» فاضية، «Deploy command» خلّيها
+   `npx wrangler deploy` متل ما هي ← «Deploy». انطر لحد ما يكتب Success (حوالي نص دقيقة).
+5. اللينك: تبويب «Overview» ← تحت اسم المشروع بيطلع `solang-vision-qc.<اسم-حسابك>.workers.dev` مع زر «Visit».
+   (لينك الديمو الفعلي: `https://solang-vision-qc.saadmansour.workers.dev/station/`.)
+6. المفتاح — **انتبه للقسم الصح**: «Settings» ← أول قسم اسمو **«Runtime variables and secrets»** (يلي فيه `DAILY_LIMIT`
+   و`MAX_BODY_MB`)، **مش** قسم «Builds» تحت. اكبس «+ Add variable»:
+   - «Key»: `META_API_KEY` (الاسم، بتكتبو بإيدك).
+   - «Value»: الصق مفتاح Meta من ملف `meta_key.txt` (الطويل يلي بيبلّش بـ`LLM_`).
+   - علّم مربع **«Secret»** جنب القيمة (هيدا يلي بيخبّيها).
+   - «Add variable and deploy».
+   لازم يطلع بالجدول سطر نوعو «Secret» واسمو `META_API_KEY` وقيمتو «Value encrypted».
+7. جرّب: افتح `https://solang-vision-qc.<اسم-حسابك>.workers.dev/health` ← لازم يطلع `"key":"set"`. بعدها افتح
+   `/station/` من موبايلك، اسمح للكاميرا، وجرّب قطعة.
 
-خلص. الخطوات 1 و2 و3 تحت هي الطريقة القديمة (Worker منفصل + Pages) وما إلك داعي فيها إلا إذا بدك الوسيط على لينك لحالو.
+الشريط الأصفر «Update your Wrangler configuration…» يلي بيطلع بعد أي تعديل مجرد تنبيه، سكّرو.
+الخطوات 1 و2 و3 تحت هي الطريقة القديمة (Worker منفصل + Pages) وما إلك داعي فيها إلا إذا بدك الوسيط على لينك لحالو.
 
 ---
 
