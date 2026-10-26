@@ -220,6 +220,9 @@ Without `?mode` one device does everything. HTTPS is required for the camera; ad
   link cannot drain credits.
 - The publishable Supabase key can only insert into the demo bucket (no UPDATE, no DELETE policy): evidence photos
   cannot be overwritten or erased from the page. The demo tables themselves have RLS off (fake data, throwaway project).
+- The phone ⇄ tablet link is a **public Realtime channel** of the same throwaway project: anyone holding the demo key
+  could ask the phone to shoot (one piece per ~25 s at most, and the per-IP daily limit still applies to the phone). A
+  production deployment would use private channels with Realtime authorization.
 - The local dev proxy answers only same-origin requests from its own station page (no CORS on `/v1/*`, Host checked),
   so a page from another origin cannot spend the developer's key.
 - Model output is free text; the UI builds DOM with `textContent` only, never `innerHTML`.
