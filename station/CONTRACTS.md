@@ -142,7 +142,7 @@ Layout (portrait tablet first, works landscape and desktop):
 
 Saving (app.js):
 - Insert the inspection first (station, inspector, order_number, model_code, garment, side, width, height, garment_box, result = the full pipeline result minus nothing, n_red, n_amber, decision, duration_ms, input_tokens, output_tokens) → id.
-- Upload `YYYY-MM-DD/<id>/photo.jpg` (original blob as captured; if it is > 12 MB upload `img.blob({full, quality 0.85})`), `annotated.jpg` (render the preview + circles on a canvas, 1600 px), and `crop-<n>.jpg` per finding; then `updateInspection(id, {photo_path, annotated_path})`.
+- Upload `YYYY-MM-DD/<id>/photo.jpg` (original blob as captured; if it is > 12 MB upload `img.blob({full, quality 0.85})`), `annotated.jpg` (render the preview + circles on a canvas, 1600 px), and `crop-<n>.jpg` per finding; then — only after the finding and example rows are in — `updateInspection(id, {photo_path, annotated_path, decision})`. `photo_path` set = the row is complete; the review tablet opens only such rows (`decision null` + no `photo_path` = the camera is still uploading, shown as ⏫).
 - Insert findings rows (kind, source, type, x, y, confidence, level, severity, why, crop_path, verdict confirmed|rejected|added|null, verdict_by = inspector, verdict_at, worker_name, stage).
 - For every finding with a verdict insert a `vision_examples` row: label `defect` for confirmed/added, `not_defect` for rejected, with the crop path and model_code. (This is the learning loop; later inspections will read them.)
 - Never block the UI on uploads; show per-step status; on failure keep the data in memory and offer «🔁 حاول الحفظ مرة تانية».
@@ -154,8 +154,8 @@ Pipeline call (exact):
 ```js
 import { inspect } from '../shared/pipeline.js'
 import * as samParser from './vendor/meta-sam-parser/index.js'
-const res = await inspect(img, { api: wrappedApi, samParser, garment: order.garment, onProgress, concurrency: 6, signal: controller.signal })
-// After the garment is found the pipeline runs two branches concurrently (local: tiles → verify · global: silhouette → parts/mirror → global),
+const res = await inspect(img, { api: wrappedApi, samParser, garment: order.garment, onProgress, concurrency: 10, signal: controller.signal })
+// After the garment is found the pipeline runs two branches concurrently (local: tiles → verify · global: silhouette → parts/mirror ∥ global),
 // so progress events interleave; onProgress('stage_done', {stage, ms}) fires after each stage. With `signal` aborted, inspect() rejects
 // with an Error whose name is 'AbortError' (treat as cancel, not failure).
 // res = { width, height, garmentBox, hasMask, tiles, candidates, verified, findings:[{kind, source, type, x, y, confidence, level, severity, why, window?, unsure?, hits?}], parts, usage:{input_tokens, output_tokens, calls, sam_calls}, timings:{garment, tiles, verify, silhouette, parts, global, total} }
@@ -163,3 +163,26 @@ const res = await inspect(img, { api: wrappedApi, samParser, garment: order.garm
 Cost line to show after a run: `~$` = `(input_tokens*1.25 + output_tokens*4.25)/1e6 + 0.0025*sam_calls`, and `timings.total/1000` s.
 
 Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Desktop testing uses the file button with `dev/photos/*.jpg` (gitignored) — the whole pipeline must run in the browser exactly as on the tablet.
+
+## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)
+
+Supabase Realtime **broadcast** over one WebSocket per device (Phoenix protocol, no library, no table, no SQL). Topic
+`realtime:vqc:<STATION>` on the demo project, public channel, `self: false`. At-most-once: nothing is queued or stored.
+
+```js
+import { openLink } from './link.js'
+const link = openLink({ url: cfg.SUPABASE_URL, key: cfg.SUPABASE_KEY, station: cfg.STATION, onMessage(event, payload) {}, onStatus(status) {} })
+link.send(event, payload) → boolean   // true only when the message left on a joined channel
+link.connected() · link.close()        // status: 'connecting' | 'joined' | 'offline' | 'error' — reconnects by itself (1 s … 15 s backoff, heartbeat 25 s)
+```
+
+Events (app.js, only in `?mode=camera` / `?mode=review`; a single-device page opens no link):
+
+| event | from | payload | meaning |
+|---|---|---|---|
+| `state` | both, every 2 s and on every change | camera: `{role:'camera', device, state: 'idle'\|'starting'\|'running'\|'uploading'\|'nocam', note, lastId}` · review: `{role:'review', by}` | liveness + what the phone is doing (`note` = its progress line while running). A peer silent for 7 s is shown as gone. |
+| `capture` | review | `{req, by}` | «📸 افحص القطعة يلي تحت الكاميرا»: shoot now. |
+| `ack` | camera | `{req, ok, reason}` | answered at once; `ok:false` with an Arabic reason (busy, no camera). No ack in 4 s → the tablet says so and re-enables the button. |
+| `saved` | camera | `{id}` | the auto-save finished (row released with `photo_path`): the tablet polls right away. |
+
+The phone, on `capture`: refuses while a run is in progress; restarts its camera if it had stopped; leaves the previous result (its upload goes on detached); shoots 350 ms after switching back to the live view. The tablet's button is enabled only when the phone is `idle`, `uploading` or `nocam` (the press then tries to revive the camera).

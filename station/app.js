@@ -7,6 +7,7 @@ import * as samParser from './vendor/meta-sam-parser/index.js'
 import { makeApi, makeDb } from './api.js'
 import { fromBlob } from './browser-image.js'
 import { openCamera, takePhoto, StillnessDetector, grayscaleSample } from './camera.js'
+import { openLink } from './link.js'
 
 const TYPE_AR = { hole: 'خرم', snag: 'سحبة', stain: 'بقعة', loose_thread: 'خيط طالع', stitching: 'درزة', puckering: 'تكرمش', unfinished_edge: 'حافة مش مخلّصة', asymmetry: 'فرق بين الجهتين', length: 'طول مختلف', print: 'طباعة', missing_part: 'قطعة ناقصة', other: 'شي تاني' }
 const DEC_AR = { pass: 'سليمة', repair: 'تصليح', reject: 'مرفوضة' }
@@ -19,6 +20,7 @@ const SAMPLE_W = 64, SAMPLE_H = 48           // detector sample size (matches St
 // Without ?mode the page does everything on one device (desktop testing, single-device demo).
 const MODE = ['camera', 'review'].includes(new URLSearchParams(location.search).get('mode')) ? new URLSearchParams(location.search).get('mode') : 'all'
 const REVIEW_POLL_MS = 3000, CAMERA_NEXT_MS = 4000
+const LINK_STATE_MS = 2000, PEER_TTL_MS = 7000, ACK_WAIT_MS = 4000   // phone ⇄ tablet link: state every 2 s, a peer silent for 7 s is gone, a shot request waits 4 s for its ack
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const BIG_PHOTO = 30 * 1024 * 1024           // JPEG originals are uploaded as-is below this (a 24 MP phone JPEG is 5–7 MB); only non-JPEG picks are re-encoded
 
@@ -37,6 +39,7 @@ const S = {
   history: [], histSeq: 0,
   camStarting: false, wakeLock: null,
   reviewId: null, reviewDate: null, reviewBusy: false, reviewLocked: false, reviewTimer: null, lastPending: 0,   // ?mode=review
+  link: null, linkUp: false, peer: null, peerSeen: 0, capReq: null, lastSavedId: null, linkTimer: null,              // phone ⇄ tablet link (link.js)
 }
 
 // ── tiny DOM helpers ─────────────────────────────────────────────────────────
@@ -94,6 +97,8 @@ async function init() {
     refreshStats(); loadHistory()
   }
   if (MODE === 'review') startReview(); else startCamera()
+  $('linkBar').hidden = MODE !== 'review'
+  if (MODE !== 'all' && S.cfg && S.cfg.SUPABASE_URL && S.cfg.SUPABASE_KEY) startLink()      // the two device modes talk over the Realtime link
   requestWakeLock(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') requestWakeLock() })
 }
 
@@ -115,6 +120,7 @@ function wire() {
   $('btnRetry').addEventListener('click', saveInspection)
   $('btnNew').addEventListener('click', newPiece)
   $('btnBack').addEventListener('click', newPiece)
+  $('btnRemote').addEventListener('click', requestRemoteCapture)
   // overlay alignment needs no JS on resize: the svg is positioned on the same box as the <img> (see style.css .photoWrap)
 }
 
@@ -218,6 +224,7 @@ async function runInspection(blob, sourceLabel) {
   if (!blob || !blob.size) { toast('الصورة فاضية'); return }
   S.running = true
   resetInspection(); setView('inspect'); renderCards()           // placeholder «عم فحص…» while the run is in progress
+  sendState()
   S.blob = blob; S.source = sourceLabel
   const controller = new AbortController(); S.controller = controller
   const order = S.order
@@ -231,7 +238,7 @@ async function runInspection(blob, sourceLabel) {
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 6, signal: controller.signal })
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal })
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress('انلغى الفحص'); return }
@@ -252,6 +259,7 @@ async function runInspection(blob, sourceLabel) {
     else { setProgress('وقف الفحص'); $('runErrorText').textContent = msg(e) + (e && e.stack && !String(e.stack).startsWith(msg(e)) ? '\n' + e.stack : ''); $('runError').hidden = false }
   } finally {
     stopTimer(); S.running = false; S.controller = null; $('btnCancel').hidden = true
+    sendState()
     // cards are refreshed here (after running=false) so a cancel / error / undecodable photo shows a way out instead of a stale «عم فحص…»
     if (S.view === 'inspect') { renderCards(); $('decisionBar').hidden = false; updateSaveEnabled(); $('tapHint').hidden = !S.img }
   }
@@ -379,7 +387,7 @@ function renderCards() {
   if (S.view === 'camera') { box.appendChild(el('div', 'empty', 'حطّ القطعة تحت الكاميرا وشيل إيديك — أو اختار صورة من الجهاز')); return }
   if (S.view === 'history') return
   if (!S.findings.length) {
-    const t = S.running ? 'عم فحص…' : (MODE === 'review' && !S.reviewId) ? 'بانتظار قطعة من الكاميرا… أول ما تخلص بتطلع هون لحالها' : !S.img ? 'ما قدرت أفتح الصورة — افحص قطعة جديدة' : S.incomplete ? 'الفحص ما كمل — ما تعتمد على النتيجة، افحص القطعة من جديد' : S.res ? 'ما لقيت شي مشبوه 👍 — كبس عالصورة إذا شفت عيب' : 'ما في نتيجة — كبس عالصورة إذا شفت عيب، أو افحص قطعة جديدة'
+    const t = S.running ? 'عم فحص…' : (MODE === 'review' && !S.reviewId) ? 'بانتظار قطعة من الكاميرا… أول ما تخلص بتطلع هون لحالها' : !(S.img || S.imgW) ? 'ما قدرت أفتح الصورة — افحص قطعة جديدة' : S.incomplete ? 'الفحص ما كمل — ما تعتمد على النتيجة، افحص القطعة من جديد' : S.res ? 'ما لقيت شي مشبوه 👍 — كبس عالصورة إذا شفت عيب' : 'ما في نتيجة — كبس عالصورة إذا شفت عيب، أو افحص قطعة جديدة'
     box.appendChild(el('div', 'empty', t)); return
   }
   S.findings.forEach((f, i) => box.appendChild(buildCard(f, i)))
@@ -498,6 +506,7 @@ function autoSave(img) {
 // Crops are tied to the finding objects (f._cropPath), never to a position in a list.
 async function runSave(job) {
   job.busy = true; if (S.job === job) { updateSaveEnabled(); $('btnRetry').hidden = true }
+  sendState()
   const db = S.db, n = job.findings.length
   const st = (t, cls) => { if (S.job === job) saveStatus(t, cls) }   // a job detached by «قطعة جديدة» never writes into the next inspection's status
   try {
@@ -518,7 +527,6 @@ async function runSave(job) {
       st(`عم رفع القصّات ${i + 1}/${n}…`)
       const p = base + `crop-${i + 1}.jpg`; await db.uploadPhoto(p, job.prep.crops[i]); f._cropPath = p
     }
-    if (!job.patched) { await db.updateInspection(job.id, { photo_path: job.paths.photo, annotated_path: job.paths.annotated || null, decision: job.decision }); job.patched = true }
     if (!job.findingIds) {
       st('عم سجّل النقاط…')
       const rows = job.findings.map((f) => findingRow(job, f))
@@ -535,7 +543,10 @@ async function runSave(job) {
       if (ex.length) await db.insertExamples(ex)
       job.examples = true
     }
+    // released to the review screen LAST: photo_path set = photo, preview, crops and finding rows are all in place (the tablet polls and opens only such rows)
+    if (!job.patched) { await db.updateInspection(job.id, { photo_path: job.paths.photo, annotated_path: job.paths.annotated || null, decision: job.decision }); job.patched = true }
     job.done = true; st(job.auto ? '✓ انبعتت للمراجعة' : '✓ انحفظ', 'ok')
+    if (job.auto) { S.lastSavedId = job.id; if (S.link) S.link.send('saved', { id: job.id }) }   // the tablet polls right away
     S.detached = S.detached.filter((j) => j !== job)
     if (S.job === job) { renderCards(); updateSaveEnabled() } else toast(`✓ انحفظ فحص القطعة السابقة${job.id ? ' (#' + job.id + ')' : ''}`)
     refreshStats(); loadHistory()
@@ -549,7 +560,7 @@ async function runSave(job) {
     if (S.job === job) { $('btnRetry').hidden = false; if (job.auto) $('camLast').textContent = 'آخر قطعة ما انبعتت: ' + msg(e) }
     else banner(`فحص القطعة السابقة${job.id ? ' (#' + job.id + ')' : ''} ما خلص حفظو: ${msg(e)}`, '🔁 حاول مرة تانية', () => runSave(job))
   } finally {
-    job.busy = false
+    job.busy = false; sendState()
     if (S.job === job) updateSaveEnabled()
     if (job.closeAfter && job.done) safeClose(job.img)         // the inspector already moved on; a failed detached job keeps its bitmap for the retry
   }
@@ -616,8 +627,78 @@ function findingRow(job, f) {
   }
 }
 
+// ── two-device link: camera phone ⇄ review tablet (link.js, Realtime broadcast) ──────────────────────
+// The phone reports its state every 2 s (idle / running + its progress line / uploading / nocam) and the tablet can ask it to shoot:
+// «📸» → capture{req} → the phone answers ack{req, ok, reason} at once and shoots; when its save is done it sends saved{id} so the
+// tablet polls right away instead of waiting for the next tick. Nothing is queued: a request with no ack in 4 s is reported as such.
+function startLink() {
+  S.link = openLink({
+    url: S.cfg.SUPABASE_URL, key: S.cfg.SUPABASE_KEY, station: S.cfg.STATION || 'final-qc-1', onMessage: onLinkMessage,
+    onStatus: (st) => { S.linkUp = st === 'joined'; if (S.linkUp) sendState(); renderLink() },
+  })
+  S.linkTimer = setInterval(() => { sendState(); renderLink() }, LINK_STATE_MS)
+  renderLink()
+}
+function camState() { return S.running ? 'running' : (S.job && S.job.busy) ? 'uploading' : S.camStarting ? 'starting' : !S.cam ? 'nocam' : 'idle' }   // a file-input run on a camera-less device still reads «running»
+function sendState() {
+  if (!S.link || !S.linkUp) return
+  if (MODE === 'camera') S.link.send('state', { role: 'camera', device: S.inspector || '', state: camState(), note: S.running ? $('progressText').textContent : '', lastId: S.lastSavedId })
+  else if (MODE === 'review') S.link.send('state', { role: 'review', by: S.inspector || '' })
+}
+function onLinkMessage(event, p) {
+  if (event === 'state') { if (p.role && p.role !== MODE) { S.peer = p; S.peerSeen = Date.now(); renderLink() } return }
+  if (MODE === 'camera' && event === 'capture') { remoteCapture(p); return }
+  if (MODE !== 'review') return
+  if (event === 'ack' && S.capReq && p.req === S.capReq.req) {
+    clearTimeout(S.capReq.timer); S.capReq = null
+    toast(p.ok ? '📷 الموبايل عم يصوّر…' : 'الموبايل ما صوّر: ' + (p.reason || '')); renderLink()
+  } else if (event === 'saved') reviewTick()
+}
+// the tablet asked for a shot: answer at once, revive the camera if it had stopped, leave the previous piece (its upload goes on detached), shoot
+async function remoteCapture(p) {
+  const reply = (ok, reason) => { if (S.link) S.link.send('ack', { req: p.req, ok, reason: reason || null }) }
+  if (S.running || S.capturing) { reply(false, 'في فحص شغّال — استنّي يخلص'); return }
+  if (!S.cam && !S.camStarting) await startCamera()
+  if (!S.cam) { reply(false, 'الكاميرا مش شغّالة عالموبايل'); return }
+  if (S.view !== 'camera') { resetInspection(); setView('camera'); renderCards() }
+  reply(true); sendState()
+  setTimeout(() => captureFromCamera('من شاشة المراجعة'), 350)      // let the live view paint a frame after the panel switch
+}
+function requestRemoteCapture() {
+  if (!S.link || !S.linkUp || S.capReq) return
+  const req = Math.random().toString(36).slice(2) + Date.now().toString(36)
+  if (!S.link.send('capture', { req, by: S.inspector || '' })) { toast('ما في اتصال بالموبايل'); return }
+  S.capReq = { req, timer: setTimeout(() => { if (S.capReq && S.capReq.req === req) { S.capReq = null; toast('الموبايل ما ردّ — تأكدي إنو صفحة الكاميرا مفتوحة عليه'); renderLink() } }, ACK_WAIT_MS) }
+  renderLink()
+}
+// status line on both devices; on the tablet also the «📸» button (enabled only when the phone can shoot now)
+function renderLink() {
+  const alive = !!S.peer && Date.now() - S.peerSeen < PEER_TTL_MS
+  if (MODE === 'camera') {
+    const m = $('camLink'); if (!S.link) { m.hidden = true; return }
+    m.textContent = !S.linkUp ? '🔌 عم وصل بشاشة المراجعة…' : alive ? `🧐 شاشة المراجعة متصلة${S.peer.by ? ' (' + S.peer.by + ')' : ''} — فيها تطلب الفحص من عندها` : '🧐 شاشة المراجعة مش مفتوحة — افتح ?mode=review عالتابلت'
+    m.className = 'msg' + (alive ? ' ok' : ''); m.hidden = false; return
+  }
+  if (MODE !== 'review') return
+  const dev = alive && S.peer.device ? ' (' + S.peer.device + ')' : '', st = alive ? S.peer.state : null
+  let t, cls = 'off', on = false
+  if (!S.link) t = 'ما في اتصال بالموبايل (config.js)'
+  else if (!S.linkUp) t = '🔌 عم وصل…'
+  else if (!alive) t = '📷 الموبايل مش متصل — افتحي رابط الكاميرا عليه'
+  else if (S.capReq) { t = '📨 بعتت للموبايل…'; cls = 'busy' }
+  else if (st === 'running') { t = `⏳ الموبايل عم يفحص${dev}${S.peer.note ? ' — ' + S.peer.note : ''}`; cls = 'busy' }
+  else if (st === 'starting') { t = `📷 الموبايل عم يشغّل الكاميرا${dev}…`; cls = 'busy' }
+  else if (st === 'uploading') { t = `⏫ الموبايل عم يرفع القطعة السابقة${dev} — فيكي تصوّري التالية`; cls = 'ok'; on = true }
+  else if (st === 'nocam') { t = `📷 الموبايل متصل${dev} بس كاميرتو واقفة — الكبسة بتجرّب تشغيلها`; cls = 'busy'; on = true }
+  else { t = `📷 الموبايل جاهز${dev} — حطّي القطعة واكبسي`; cls = 'ok'; on = true }
+  $('linkText').textContent = t; $('linkBar').className = 'linkBar ' + cls; $('btnRemote').disabled = !on
+}
+
 // ── ?mode=review: the inspector's screen ─────────────────────────────────────
 // Polls the demo DB; inspections saved by the camera device with no decision yet are «pending» and open automatically (oldest first).
+// A row without photo_path is still being uploaded by the camera (files and finding rows not all there yet): shown as ⏫, never opened.
+const isPending = (h) => !h.decision && !!h.photo_path
+const isUploading = (h) => !h.decision && !h.photo_path
 function startReview() {
   setView('inspect'); $('cameraPanel').hidden = true; $('tapHint').hidden = true
   $('progress').hidden = false; setProgress('بانتظار قطعة من الكاميرا…'); $('btnCancel').hidden = true
@@ -630,10 +711,10 @@ async function reviewTick() {
   if (!S.db || S.reviewBusy || S.running) return
   let list
   try { list = (await S.db.recentInspections(12)) || [] } catch (e) { return }
-  const changed = JSON.stringify(list.map((h) => [h.id, h.decision])) !== JSON.stringify(S.history.map((h) => [h.id, h.decision]))
+  const changed = JSON.stringify(list.map((h) => [h.id, h.decision, h.photo_path])) !== JSON.stringify(S.history.map((h) => [h.id, h.decision, h.photo_path]))
   S.history = list
   if (changed) renderStrip()
-  const pending = list.filter((h) => !h.decision).sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  const pending = list.filter(isPending).sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   if (pending.length > S.lastPending) notifyNew()
   S.lastPending = pending.length
   if (!S.reviewId && !S.reviewOpening && pending.length) openReview(pending[0])
@@ -668,14 +749,15 @@ async function openReview(h) {
     if (S.reviewId !== h.id) return                           // the reviewer moved on
     if (blob) { S.previewObjUrl = URL.createObjectURL(blob); await showPhoto(S.previewObjUrl, h.width, h.height) }
     else if (S.reviewPhotoUrl) {                              // older inspections without preview.jpg: full photo
-      const full = await (await fetch(S.reviewPhotoUrl)).blob(); if (S.reviewId !== h.id) return
+      const fr = await fetch(S.reviewPhotoUrl); if (!fr.ok) throw new Error('الصورة مش موجودة بالمخزن (' + fr.status + ')')
+      const full = await fr.blob(); if (S.reviewId !== h.id) return
       S.img = await fromBlob(full); S.blob = full; await showPhoto(await S.img.previewUrl(1600), S.img.width, S.img.height)
     }
-    S.res = { garmentBox: h.garment_box || null }
+    S.res = { garmentBox: h.garment_box || null }; S.incomplete = h.incomplete || null      // the phone's failed model calls must not read as «clean» here either
     S.findings = (rows || []).map((r) => ({ id: r.id, kind: r.kind, source: r.source, type: r.type, x: r.x, y: r.y, confidence: +r.confidence || 0, level: r.level, severity: r.severity, why: r.why || '', crop_path: r.crop_path, verdict: r.verdict || null, verdict_at: r.verdict_at || null, worker_name: r.worker_name || null, stage: r.stage || null, _workerId: r.worker_name ? String((S.workers.find((w) => w.name === r.worker_name) || {}).id || '') : '', unsure: /مش متأكد|شافوها بلاطتين/.test(r.why || '') }))
     S.decision = null
     renderAll(); renderStrip(); $('decisionBar').hidden = false; $('tapHint').hidden = !S.imgW
-    stopTimer(); setProgress(`قطعة #${h.id} · ${h.order_number || ''} · ${hhmm(h.created_at)} — ${S.findings.length ? S.findings.length + ' نقطة للمراجعة' : 'الكاميرا ما لقت شي — قرّري'}`)
+    stopTimer(); setProgress(`قطعة #${h.id} · ${h.order_number || ''} · ${hhmm(h.created_at)} — ${S.incomplete ? '⚠ الفحص ما كمل عالموبايل — ما تعتمدي على «ما لقت شي»' : S.findings.length ? S.findings.length + ' نقطة للمراجعة' : 'الكاميرا ما لقت شي — قرّري'}`)
   } catch (e) {
     stopTimer(); setProgress('ما قدرت أفتح القطعة: ' + msg(e)); S.reviewId = null
   } finally { S.reviewOpening = false }
@@ -754,16 +836,16 @@ function renderStrip() {
   const strip = $('historyStrip'); clear(strip)
   if (!S.history.length) { strip.appendChild(el('div', 'empty', 'بعد ما في فحوصات')); return }
   S.history.forEach((h) => {
-    const pending = !h.decision
-    const b = el('button', 'hist' + (pending ? ' pending' : '') + (S.reviewId === h.id ? ' current' : '')); b.type = 'button'
+    const pending = isPending(h), uploading = isUploading(h)
+    const b = el('button', 'hist' + (pending ? ' pending' : '') + (uploading ? ' uploading' : '') + (S.reviewId === h.id ? ' current' : '')); b.type = 'button'
     const im = el('img'); im.alt = ''; im.loading = 'lazy'; im.decoding = 'async'
     // the 1600 px annotated copy is far lighter than the full-res photo; photo_path is the fallback
     const p = h.annotated_path || h.photo_path; if (p) im.src = S.db.publicUrl(p)
     b.appendChild(im)
-    b.appendChild(el('span', 'hdec', pending ? '⏳' : (DEC_EMOJI[h.decision] || '·')))
+    b.appendChild(el('span', 'hdec', uploading ? '⏫' : pending ? '⏳' : (DEC_EMOJI[h.decision] || '·')))
     b.appendChild(el('span', 'hord', h.order_number || h.model_code || ''))
-    b.appendChild(el('span', 'htime', pending ? 'بانتظار المراجعة' : `${hhmm(h.created_at)} · ${SIDE_AR[h.side] || ''}`))
-    b.addEventListener('click', () => (pending && MODE === 'review') ? switchReview(h) : openHistory(h))
+    b.appendChild(el('span', 'htime', uploading ? 'عم توصل من الكاميرا…' : pending ? 'بانتظار المراجعة' : `${hhmm(h.created_at)} · ${SIDE_AR[h.side] || ''}`))
+    b.addEventListener('click', () => uploading ? toast('لسا عم توصل من الكاميرا — ثواني') : (pending && MODE === 'review') ? switchReview(h) : openHistory(h))
     strip.appendChild(b)
   })
 }

@@ -1,5 +1,5 @@
 // Node harness: run the full pipeline on local photos with the Meta API directly (dev key from meta_key.txt — never committed)
-// usage: node run_pipeline.mjs <photo.jpg> [--garment sweatshirt] [--ref reference.jpg] [--out dir]
+// usage: node run_pipeline.mjs <photo.jpg> [--garment sweatshirt] [--ref reference.jpg] [--out dir] [--conc 6]
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -36,7 +36,7 @@ const outDir = arg('--out', './out/annotated'); fs.mkdirSync(outDir, { recursive
 const img = await adapter(file)
 const ref = arg('--ref', null) ? await adapter(arg('--ref')) : null
 const t0 = Date.now()
-const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
+const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, concurrency: +arg('--conc', 6) || 6, onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
 const name = path.basename(file).replace(/\.[^.]+$/, '')
 fs.writeFileSync(path.join(outDir, name + '.json'), JSON.stringify(res, null, 1))
 // annotate: downscale to 1600 and draw circles (red ≥0.8, amber ≥0.5, blue = global/measurement)

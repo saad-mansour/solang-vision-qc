@@ -136,6 +136,11 @@ The raw result JSONs and the annotated JPEGs of that run are committed in [`dev/
 (the original photos are git-ignored); the fields used above are `findings[]`, `candidates`, `verified[]`,
 `parts.mirror.votes`, `garmentBox.c`, `usage` and `timings.total`.
 
+**Timing (Oct 27):** the parts/mirror comparison and the whole-garment pass now run side by side, and the parts SAM call is sent
+while the garment is still being located; the station sends up to 10 tile calls at once (was 6). IMG_1286: 22.3 → 21.6 s on the
+same findings — the remaining critical path is the two mirror calls (~17 s). A 12 MP phone photo that took 39 s on the old
+ordering should land around 25 s (estimate, not yet measured on the phone).
+
 ## Repo layout
 
 ```
@@ -198,7 +203,10 @@ redeploys. The station is at `https://<project>.<account>.workers.dev/station/` 
 **Two devices at the table:** the phone mounted above the table opens `/station/?mode=camera` (captures when the
 garment is still, inspects, saves the inspection with the decision left open) and the inspector's tablet opens
 `/station/?mode=review` (no camera; a new inspection pops up with its circles and crops, the inspector confirms /
-rejects / attributes / decides, and the next piece opens automatically). Both talk only through the demo database.
+rejects / attributes / decides, and the next piece opens automatically). The tablet also shows the phone's state and has a
+**📸 shoot** button that tells the phone to capture now: the two devices talk over a Supabase Realtime broadcast channel
+([`station/link.js`](station/link.js), no table, no SQL) and hand the inspection itself over through the demo database —
+a row is released to the tablet only once its photo, preview, crops and finding rows are all uploaded.
 Without `?mode` one device does everything. HTTPS is required for the camera; add the page to the home screen.
 
 ## Safety and privacy

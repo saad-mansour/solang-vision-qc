@@ -19,7 +19,8 @@
 //
 // Scheduling: after step 1 the two independent branches run CONCURRENTLY (Promise.all):
 //   branch L (local):  tiles → verify                      — up to opts.concurrency (default 6) calls at once
-//   branch G (global): silhouette → parts/mirror → global  — at most 3 calls at once (the mirror pass fires 2)
+//   branch G (global): silhouette, then parts/mirror ∥ global — at most 3 Spark calls at once (the mirror pass fires 2, global 1);
+//                      the parts SAM call is sent right after step 1's downscale, so it overlaps the garment SAM call
 // so per-stage timings overlap; timings.total is wall-clock. opts.signal (AbortSignal) is checked before every stage and before every
 // tile / verify item: when aborted, inspect() rejects with an Error whose name is 'AbortError'.
 // Progress events: garment · tiles{count} · tile{i,n,defects} · verify{count} · parts{part} · global · warn{stage,error} · stage_done{stage,ms}
@@ -210,6 +211,9 @@ export async function inspect(img, opts) {
   const samMax = opts.samMaxSide || 1600
   const scale = Math.min(1, samMax / Math.max(W, H))
   const small = await img.jpeg({ x: 0, y: 0, w: W, h: H, resize: { w: Math.round(W * scale), h: Math.round(H * scale) } })
+  // the parts SAM call needs only this downscaled copy, not the garment region: sent now, it overlaps the garment call (~5 s off branch G)
+  const partsSam = g.part ? samRaw(api, g.part, small).then((text) => { usage.sam_calls += 1; return text }) : null
+  if (partsSam) partsSam.catch(() => { /* reported as a parts warning when branch G awaits it */ })
   let region = { x: 0, y: 0, w: W, h: H }, garmentBox = null, mask = null
   try {
     for (const c of [...new Set([g.concept, 'garment', 'clothing'])]) {
@@ -318,59 +322,65 @@ export async function inspect(img, opts) {
     }
     stageDone('silhouette', t)
 
-    // ── 5) parts: mirror comparison (left vs mirrored right) with equalized crops
-    checkAbort()
-    t = Date.now()
-    if (g.part) {
-      progress('parts', { part: g.part })
-      try {
-        const text = await samRaw(api, g.part, small); usage.sam_calls += 1
-        let boxes = boxesToFull(parseSamBoxes(text).filter(b => b.c == null || b.c >= 0.4), scale, region, 0.04)
-        boxes = boxes.sort((p, q) => (q.x2 - q.x1) * (q.y2 - q.y1) - (p.x2 - p.x1) * (p.y2 - p.y1)).slice(0, 2).sort((p, q) => p.x1 - q.x1)
-        parts.boxes = boxes
-        if (boxes.length === 2) {
-          // equalize: same height span for legs (top of both → bottom of the longer), same width span for sleeves
-          let A = { ...boxes[0] }, B = { ...boxes[1] }
-          if (g.measure === 'leg') { const yTop = Math.min(A.y1, B.y1), yBot = Math.max(A.y2, B.y2); A.y1 = B.y1 = yTop; A.y2 = B.y2 = yBot }
-          else { const h = Math.max(A.y2 - A.y1, B.y2 - B.y1); A.y2 = A.y1 + h; B.y2 = B.y1 + h; const w = Math.max(A.x2 - A.x1, B.x2 - B.x1); A.x2 = A.x1 + w; B.x1 = B.x2 - w }   // الكفة الخارجية هي المرجع: شمال = x1، يمين = x2
-          const clip = b => ({ x1: clamp(b.x1, 0, W - 2), y1: clamp(b.y1, 0, H - 2), x2: clamp(b.x2, 2, W), y2: clamp(b.y2, 2, H) })
-          A = clip(A); B = clip(B)
-          const crop = (b, mirror) => img.jpeg({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1), resize: fit(b, 1200), mirror })
-          const [a, m] = await Promise.all([crop(A, false), crop(B, true)])
-          // مرتين، ولازم الاتنين يقولوا «مختلف» (الحكم الواحد بيتأثر بطريقة الفرد) — الثقة = الأصغر
-          const [r1, r2] = await Promise.all([spark(api, PROMPTS.mirror(g.part), [a, m], 'medium'), spark(api, PROMPTS.mirror(g.part), [a, m], 'medium')])
-          acct(r1.usage); acct(r2.usage)
-          const j1 = r1.json || {}, j2 = r2.json || {}
-          const both = !!j1.different && !!j2.different
-          const j = both ? (clamp(+j1.confidence || 0, 0, 1) <= clamp(+j2.confidence || 0, 0, 1) ? j1 : j2) : (!j1.different ? j1 : j2)
-          parts.mirror = { different: both, confidence: clamp(+j.confidence || 0, 0, 1), differences: j.differences || [], why: j.why || '', votes: [!!j1.different, !!j2.different] }
-          if (both && parts.mirror.confidence >= LEVELS.amber) {
-            mirrorFindings.push({ kind: 'global', source: 'mirror', type: 'asymmetry', x: Math.round((B.x1 + B.x2) / 2), y: Math.round((B.y1 + B.y2) / 2), confidence: parts.mirror.confidence, level: level(parts.mirror.confidence), severity: 'major', why: (parts.mirror.differences[0] || parts.mirror.why) })
+    // steps 5 and 6 only need step 1's region / small image → side by side (the mirror pass is the slowest call of the whole run)
+    async function partsStep() {
+      // ── 5) parts: mirror comparison (left vs mirrored right) with equalized crops
+      checkAbort()
+      const tP = Date.now()
+      if (g.part) {
+        progress('parts', { part: g.part })
+        try {
+          const text = await partsSam   // sent during step 1
+          let boxes = boxesToFull(parseSamBoxes(text).filter(b => b.c == null || b.c >= 0.4), scale, region, 0.04)
+          boxes = boxes.sort((p, q) => (q.x2 - q.x1) * (q.y2 - q.y1) - (p.x2 - p.x1) * (p.y2 - p.y1)).slice(0, 2).sort((p, q) => p.x1 - q.x1)
+          parts.boxes = boxes
+          if (boxes.length === 2) {
+            // equalize: same height span for legs (top of both → bottom of the longer), same width span for sleeves
+            let A = { ...boxes[0] }, B = { ...boxes[1] }
+            if (g.measure === 'leg') { const yTop = Math.min(A.y1, B.y1), yBot = Math.max(A.y2, B.y2); A.y1 = B.y1 = yTop; A.y2 = B.y2 = yBot }
+            else { const h = Math.max(A.y2 - A.y1, B.y2 - B.y1); A.y2 = A.y1 + h; B.y2 = B.y1 + h; const w = Math.max(A.x2 - A.x1, B.x2 - B.x1); A.x2 = A.x1 + w; B.x1 = B.x2 - w }   // الكفة الخارجية هي المرجع: شمال = x1، يمين = x2
+            const clip = b => ({ x1: clamp(b.x1, 0, W - 2), y1: clamp(b.y1, 0, H - 2), x2: clamp(b.x2, 2, W), y2: clamp(b.y2, 2, H) })
+            A = clip(A); B = clip(B)
+            const crop = (b, mirror) => img.jpeg({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1), resize: fit(b, 1200), mirror })
+            const [a, m] = await Promise.all([crop(A, false), crop(B, true)])
+            // مرتين، ولازم الاتنين يقولوا «مختلف» (الحكم الواحد بيتأثر بطريقة الفرد) — الثقة = الأصغر
+            const [r1, r2] = await Promise.all([spark(api, PROMPTS.mirror(g.part), [a, m], 'medium'), spark(api, PROMPTS.mirror(g.part), [a, m], 'medium')])
+            acct(r1.usage); acct(r2.usage)
+            const j1 = r1.json || {}, j2 = r2.json || {}
+            const both = !!j1.different && !!j2.different
+            const j = both ? (clamp(+j1.confidence || 0, 0, 1) <= clamp(+j2.confidence || 0, 0, 1) ? j1 : j2) : (!j1.different ? j1 : j2)
+            parts.mirror = { different: both, confidence: clamp(+j.confidence || 0, 0, 1), differences: j.differences || [], why: j.why || '', votes: [!!j1.different, !!j2.different] }
+            if (both && parts.mirror.confidence >= LEVELS.amber) {
+              mirrorFindings.push({ kind: 'global', source: 'mirror', type: 'asymmetry', x: Math.round((B.x1 + B.x2) / 2), y: Math.round((B.y1 + B.y2) / 2), confidence: parts.mirror.confidence, level: level(parts.mirror.confidence), severity: 'major', why: (parts.mirror.differences[0] || parts.mirror.why) })
+            }
           }
-        }
-      } catch (e) { warn('parts', e) }
-    }
-    stageDone('parts', t)
-
-    // ── 6) global pass (whole garment, optional reference)
-    checkAbort()
-    t = Date.now()
-    progress('global', {})
-    try {
-      const gMax = opts.globalMaxSide || 1600
-      const gs = Math.min(1, gMax / Math.max(region.w, region.h))
-      const b64 = await img.jpeg({ ...region, resize: { w: Math.round(region.w * gs), h: Math.round(region.h * gs) } })
-      const imgs = [b64]
-      if (opts.reference) {
-        const R = opts.reference
-        const rs = Math.min(1, gMax / Math.max(R.width, R.height))
-        imgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) } }))
+        } catch (e) { warn('parts', e) }
       }
-      const r = await spark(api, PROMPTS.global(!!opts.reference), imgs, 'low')
-      acct(r.usage)
-      globalFindings = ((r.json && r.json.findings) || []).map(f => { const c = clamp(+f.confidence || 0, 0, 1); return { kind: 'global', source: 'global', type: String(f.type || 'other'), ...gridToPx(f.x, f.y, region), confidence: c, level: level(c), severity: 'major', why: f.why || '' } }).filter(f => f.confidence >= LEVELS.amber)
-    } catch (e) { warn('global', e) }
-    stageDone('global', t)
+      stageDone('parts', tP)
+
+    }
+    async function globalStep() {
+      // ── 6) global pass (whole garment, optional reference)
+      checkAbort()
+      const tGl = Date.now()
+      progress('global', {})
+      try {
+        const gMax = opts.globalMaxSide || 1600
+        const gs = Math.min(1, gMax / Math.max(region.w, region.h))
+        const b64 = await img.jpeg({ ...region, resize: { w: Math.round(region.w * gs), h: Math.round(region.h * gs) } })
+        const imgs = [b64]
+        if (opts.reference) {
+          const R = opts.reference
+          const rs = Math.min(1, gMax / Math.max(R.width, R.height))
+          imgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) } }))
+        }
+        const r = await spark(api, PROMPTS.global(!!opts.reference), imgs, 'low')
+        acct(r.usage)
+        globalFindings = ((r.json && r.json.findings) || []).map(f => { const c = clamp(+f.confidence || 0, 0, 1); return { kind: 'global', source: 'global', type: String(f.type || 'other'), ...gridToPx(f.x, f.y, region), confidence: c, level: level(c), severity: 'major', why: f.why || '' } }).filter(f => f.confidence >= LEVELS.amber)
+      } catch (e) { warn('global', e) }
+      stageDone('global', tGl)
+    }
+    await Promise.all([partsStep(), globalStep()])
     return { parts, findings: [...silFindings, ...mirrorFindings, ...globalFindings] }
   }
 

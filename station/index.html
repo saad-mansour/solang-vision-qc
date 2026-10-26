@@ -40,6 +40,7 @@
       </div>
       <div id="camMsg" class="msg" hidden></div>
       <div id="camLast" class="msg ok" hidden></div>
+      <div id="camLink" class="msg" hidden></div>
       <div class="row">
         <label class="toggle"><input type="checkbox" id="autoCap" checked> لقطة تلقائية</label>
         <button type="button" id="btnShoot" class="btn primary">📸 افحص هلق</button>
@@ -54,6 +55,11 @@
       <div id="viewHead" class="viewHead" hidden>
         <button type="button" id="btnBack" class="btn">⬅ رجوع للكاميرا</button>
         <span id="viewTitle"></span>
+      </div>
+      <!-- review tablet only: the phone's state, and «📸» asks it to shoot (Realtime link, station/link.js) -->
+      <div id="linkBar" class="linkBar off" hidden>
+        <span id="linkText">🔌 عم وصل…</span>
+        <button type="button" id="btnRemote" class="btn primary big" disabled>📸 افحص القطعة يلي تحت الكاميرا</button>
       </div>
       <!-- the svg shares the <img> box exactly (same aspect ratio + meet), so resize/orientation keep it aligned -->
       <div class="photoWrap" id="photoWrap">
