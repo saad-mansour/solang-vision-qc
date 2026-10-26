@@ -1,14 +1,15 @@
-# not uploaded as static assets (same syntax as .gitignore)
-.git/
-.wrangler/
-node_modules/
-dev/node/
-dev/photos/
-dev/out/
+# not uploaded as static assets (wrangler matches file paths, so directories are written as dir/**)
+.git/**
+.wrangler/**
+node_modules/**
+**/node_modules/**
+dev/node/**
+dev/photos/**
+dev/out/**
+worker/**
 .dev.vars
 meta_key.txt
 supabase_demo.txt
 *.key
 .env
 .env.*
-worker/
