@@ -184,5 +184,24 @@ Events (app.js, only in `?mode=camera` / `?mode=review`; a single-device page op
 | `capture` | review | `{req, by}` | «📸 افحص القطعة يلي تحت الكاميرا»: shoot now. |
 | `ack` | camera | `{req, ok, reason}` | answered at once; `ok:false` with an Arabic reason (busy, no camera). No ack in 4 s → the tablet says so and re-enables the button. |
 | `saved` | camera | `{id}` | the auto-save finished (row released with `photo_path`): the tablet polls right away. |
+| `rtc-want` / `rtc-offer` / `rtc-answer` / `rtc-ice` / `rtc-fail` | tablet / phone | `{req, sdp?, cand?, reason?}` | WebRTC signaling for the live view, see §8. |
+
+The camera's `state` also carries `boot` (identity of the page load — a change tells the tablet its stream is gone) and `viewers`.
 
 The phone, on `capture`: refuses while a run is in progress; restarts its camera if it had stopped; leaves the previous result (its upload goes on detached); shoots 350 ms after switching back to the live view. The tablet's button is enabled only when the phone is `idle`, `uploading` or `nocam` (the press then tries to revive the camera).
+
+## 8. `station/live.js` — live view of the phone camera on the tablet (WebRTC, LAN only)
+
+```js
+import { makeSender, makeViewer, supported } from './live.js'
+// phone:  const live = makeSender({ send, getStream: () => cam.stream, onState(req, state) {} })
+//         live.makeOffer(req) · live.onAnswer(req, sdp) · live.onIce(req, cand) · live.replaceTrack(track) · live.viewers() · live.closeAll()
+// tablet: const live = makeViewer({ send, video: <video autoplay muted playsinline>, onState(state) {} })
+//         live.ask() · live.onOffer(req, sdp) · live.onIce(req, cand) · live.onFail(req, reason) · live.live() · live.connecting() · live.reason() · live.askedAt() · live.close()
+```
+
+- `RTCPeerConnection({ iceServers: [] })` on both sides — **no STUN / TURN**: host candidates only, so the stream works between devices on the same Wi-Fi and cannot be received from outside it (the demo key is public).
+- The phone sends its real camera track (stills keep the full capture size) with `maxBitrate 800 kbit/s · maxFramerate 15 · scaleResolutionDownBy → ~960 px`; one `RTCPeerConnection` per asking tablet, at most 3 (oldest dropped).
+- The offer goes out when ICE gathering completes or after 1.2 s; candidates found before that are re-sent as `rtc-ice` after the offer (duplicates are harmless), candidates found later trickle.
+- The tablet asks only while the phone's `state` says it has a camera and the tablet page is visible; it asks again when no frame arrived for 8 s, closes on a `boot` change of the phone, and shows the failure reason (or the «same Wi-Fi» hint after a silent attempt). `live()` is true only while frames arrive (`track` live, not muted, `video.readyState ≥ 2`).
+- Dev: `?fakecam=1` on localhost makes app.js use a drawn 640×480 canvas stream as the camera (stills via frame grab), and `?station=x` gives the page its own link channel so tests never touch the real station.

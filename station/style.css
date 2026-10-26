@@ -70,6 +70,12 @@ main.grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px;
 .linkBar.ok { border-color: var(--green); background: #f0fdf4; }
 .linkBar.busy { border-color: var(--amber); background: #fff7ed; }
 .linkBar.off { color: var(--muted); }
+.liveWrap { position: relative; flex: 1 1 100%; background: #000; border-radius: var(--radius); overflow: hidden; cursor: pointer; }
+.liveWrap video { display: block; width: 100%; max-height: 42vh; object-fit: contain; background: #000; }
+.liveWrap.small { flex: 0 0 auto; width: 200px; }
+.liveWrap.small video { max-height: 150px; }
+.liveCap { position: absolute; top: 8px; inset-inline-start: 8px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.92); color: var(--ink); font-size: 13px; font-weight: 700; }
+.liveWrap.live .liveCap { background: rgba(22,163,74,.92); color: #fff; }
 .modeNav { display: flex; gap: 4px; margin-inline-start: auto; font-size: 13px; }
 .modeNav a { padding: 6px 10px; border-radius: 999px; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
 .modeNav a.active { color: var(--ink); border-color: var(--line); background: var(--bg); font-weight: 700; }

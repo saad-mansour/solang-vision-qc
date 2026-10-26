@@ -204,9 +204,11 @@ redeploys. The station is at `https://<project>.<account>.workers.dev/station/` 
 garment is still, inspects, saves the inspection with the decision left open) and the inspector's tablet opens
 `/station/?mode=review` (no camera; a new inspection pops up with its circles and crops, the inspector confirms /
 rejects / attributes / decides, and the next piece opens automatically). The tablet also shows the phone's state and has a
-**📸 shoot** button that tells the phone to capture now: the two devices talk over a Supabase Realtime broadcast channel
-([`station/link.js`](station/link.js), no table, no SQL) and hand the inspection itself over through the demo database —
-a row is released to the tablet only once its photo, preview, crops and finding rows are all uploaded.
+**📸 shoot** button that tells the phone to capture now, plus a **live view of the phone's camera** so the operator sees the
+whole garment is in frame before shooting (WebRTC, peer to peer, same Wi-Fi only — [`station/live.js`](station/live.js)).
+The two devices talk over a Supabase Realtime broadcast channel ([`station/link.js`](station/link.js), no table, no SQL)
+and hand the inspection itself over through the demo database — a row is released to the tablet only once its photo,
+preview, crops and finding rows are all uploaded.
 Without `?mode` one device does everything. HTTPS is required for the camera; add the page to the home screen.
 
 ## Safety and privacy
@@ -223,6 +225,8 @@ Without `?mode` one device does everything. HTTPS is required for the camera; ad
 - The phone ⇄ tablet link is a **public Realtime channel** of the same throwaway project: anyone holding the demo key
   could ask the phone to shoot (one piece per ~25 s at most, and the per-IP daily limit still applies to the phone). A
   production deployment would use private channels with Realtime authorization.
+- The live view uses **no STUN or TURN server**: only local-network candidates exist, so the camera stream can reach a
+  device on the same Wi-Fi and nothing on the internet, whoever asks for it. The video never touches a server.
 - The local dev proxy answers only same-origin requests from its own station page (no CORS on `/v1/*`, Host checked),
   so a page from another origin cannot spend the developer's key.
 - Model output is free text; the UI builds DOM with `textContent` only, never `innerHTML`.

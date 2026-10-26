@@ -8,6 +8,7 @@ import { makeApi, makeDb } from './api.js'
 import { fromBlob } from './browser-image.js'
 import { openCamera, takePhoto, StillnessDetector, grayscaleSample } from './camera.js'
 import { openLink } from './link.js'
+import { makeSender, makeViewer } from './live.js'
 
 const TYPE_AR = { hole: 'خرم', snag: 'سحبة', stain: 'بقعة', loose_thread: 'خيط طالع', stitching: 'درزة', puckering: 'تكرمش', unfinished_edge: 'حافة مش مخلّصة', asymmetry: 'فرق بين الجهتين', length: 'طول مختلف', print: 'طباعة', missing_part: 'قطعة ناقصة', other: 'شي تاني' }
 const DEC_AR = { pass: 'سليمة', repair: 'تصليح', reject: 'مرفوضة' }
@@ -18,9 +19,12 @@ const SAMPLE_W = 64, SAMPLE_H = 48           // detector sample size (matches St
 // Two-device setup: the phone above the table opens ?mode=camera (captures, inspects and saves automatically, decision left
 // open), the inspector's tablet opens ?mode=review (no camera; new inspections pop up for confirm/reject/decision).
 // Without ?mode the page does everything on one device (desktop testing, single-device demo).
-const MODE = ['camera', 'review'].includes(new URLSearchParams(location.search).get('mode')) ? new URLSearchParams(location.search).get('mode') : 'all'
+const PARAMS = new URLSearchParams(location.search)
+const MODE = ['camera', 'review'].includes(PARAMS.get('mode')) ? PARAMS.get('mode') : 'all'
+const DEV = ['localhost', '127.0.0.1'].includes(location.hostname)   // dev-only switches: ?fakecam=1 (drawn test pattern instead of a camera), ?station=x (own link channel)
 const REVIEW_POLL_MS = 3000, CAMERA_NEXT_MS = 4000
 const LINK_STATE_MS = 2000, PEER_TTL_MS = 7000, ACK_WAIT_MS = 4000   // phone ⇄ tablet link: state every 2 s, a peer silent for 7 s is gone, a shot request waits 4 s for its ack
+const LIVE_RETRY_MS = 8000, LIVE_GRACE_MS = 5000                      // the tablet asks for the live view again when no frame arrived within 8 s; a stall shorter than 5 s keeps the last frame
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const BIG_PHOTO = 30 * 1024 * 1024           // JPEG originals are uploaded as-is below this (a 24 MP phone JPEG is 5–7 MB); only non-JPEG picks are re-encoded
 
@@ -40,6 +44,7 @@ const S = {
   camStarting: false, wakeLock: null,
   reviewId: null, reviewDate: null, reviewBusy: false, reviewLocked: false, reviewTimer: null, lastPending: 0,   // ?mode=review
   link: null, linkUp: false, peer: null, peerSeen: 0, capReq: null, lastSavedId: null, linkTimer: null,              // phone ⇄ tablet link (link.js)
+  live: null, liveBig: false, liveLostAt: 0, peerBoot: null, boot: Math.random().toString(36).slice(2),            // live view (live.js); boot = this page load's identity
 }
 
 // ── tiny DOM helpers ─────────────────────────────────────────────────────────
@@ -154,19 +159,34 @@ async function startCamera() {
   try {
     S.cam = await openCamera(video, { facing: S.facing })
   } catch (e) {
-    // desktop / no permission: hide the pill, keep the file button usable
-    S.cam = null; S.camStarting = false; $('pill').hidden = true; $('btnShoot').disabled = true; $('btnFlip').disabled = true
-    const m = $('camMsg'); m.textContent = 'الكاميرا ما اشتغلت على هالجهاز — استعمل «📁 صورة من الجهاز». (' + msg(e) + ')'; m.hidden = false
-    return
+    S.cam = DEV && PARAMS.has('fakecam') ? fakeCamera(video) : null     // desktop development only: a drawn test pattern stands in for the camera
+    if (!S.cam) {
+      // desktop / no permission: hide the pill, keep the file button usable
+      S.camStarting = false; $('pill').hidden = true; $('btnShoot').disabled = true; $('btnFlip').disabled = true
+      const m = $('camMsg'); m.textContent = 'الكاميرا ما اشتغلت على هالجهاز — استعمل «📁 صورة من الجهاز». (' + msg(e) + ')'; m.hidden = false
+      return
+    }
   }
   S.camStarting = false
   $('pill').hidden = false; $('btnShoot').disabled = false; $('btnFlip').disabled = false; $('camMsg').hidden = true
   S.cam.onLost = cameraLost
+  if (S.live && MODE === 'camera') S.live.replaceTrack(S.cam.track)          // tablets already watching get the new camera
   S.det = new StillnessDetector()
   S.det.onStill = () => { if (S.autoCapture && S.view === 'camera' && !S.running && !S.capturing) captureFromCamera('تلقائي') }
   S.sampleCanvas = S.sampleCanvas || document.createElement('canvas')
   setPill('idle')
   S.loop = setInterval(sampleTick, 125)        // ~8 fps is plenty for a hands-left-the-frame detector
+}
+
+// ?fakecam=1 on localhost: a 640×480 canvas with a moving block, exposed like a camera (stills come from the frame grab) — lets the whole
+// two-device flow, including the live view, be exercised on a desktop without a camera
+function fakeCamera(video) {
+  const c = document.createElement('canvas'); c.width = 640; c.height = 480; const ctx = c.getContext('2d'); let n = 0
+  const draw = () => { n++; ctx.fillStyle = '#ddd'; ctx.fillRect(0, 0, 640, 480); ctx.fillStyle = '#b55'; ctx.fillRect(120 + Math.round(40 * Math.sin(n / 10)), 100, 400, 280); ctx.fillStyle = '#000'; ctx.font = '28px sans-serif'; ctx.fillText('FAKE CAM ' + n, 20, 40) }
+  draw(); const t = setInterval(draw, 100)
+  const stream = c.captureStream(10), track = stream.getVideoTracks()[0]
+  video.srcObject = stream; video.play().catch(() => {})
+  return { stream, track, settings: { width: 640, height: 480 }, facing: 'environment', live: () => track.readyState === 'live', stop() { clearInterval(t); track.stop() }, onLost: null }
 }
 
 // the track ended (OS took the camera, screen lock, another app): say so instead of silently re-shooting the frozen frame
@@ -633,20 +653,34 @@ function findingRow(job, f) {
 // tablet polls right away instead of waiting for the next tick. Nothing is queued: a request with no ack in 4 s is reported as such.
 function startLink() {
   S.link = openLink({
-    url: S.cfg.SUPABASE_URL, key: S.cfg.SUPABASE_KEY, station: S.cfg.STATION || 'final-qc-1', onMessage: onLinkMessage,
+    url: S.cfg.SUPABASE_URL, key: S.cfg.SUPABASE_KEY, station: (DEV && PARAMS.get('station')) || S.cfg.STATION || 'final-qc-1', onMessage: onLinkMessage,
     onStatus: (st) => { S.linkUp = st === 'joined'; if (S.linkUp) sendState(); renderLink() },
   })
-  S.linkTimer = setInterval(() => { sendState(); renderLink() }, LINK_STATE_MS)
+  const send = (e, p) => S.link.send(e, p)
+  if (MODE === 'review') {
+    S.live = makeViewer({ send, video: $('liveView'), onState: renderLive })
+    $('liveWrap').addEventListener('click', () => { S.liveBig = !S.liveBig; renderLive() })
+    document.addEventListener('visibilitychange', maintainLive)
+  } else S.live = makeSender({ send, getStream: () => S.cam && S.cam.stream, onState: () => renderLink() })
+  S.linkTimer = setInterval(() => { sendState(); renderLink(); maintainLive() }, LINK_STATE_MS)
   renderLink()
 }
 function camState() { return S.running ? 'running' : (S.job && S.job.busy) ? 'uploading' : S.camStarting ? 'starting' : !S.cam ? 'nocam' : 'idle' }   // a file-input run on a camera-less device still reads «running»
 function sendState() {
   if (!S.link || !S.linkUp) return
-  if (MODE === 'camera') S.link.send('state', { role: 'camera', device: S.inspector || '', state: camState(), note: S.running ? $('progressText').textContent : '', lastId: S.lastSavedId })
+  if (MODE === 'camera') S.link.send('state', { role: 'camera', device: S.inspector || '', state: camState(), note: S.running ? $('progressText').textContent : '', lastId: S.lastSavedId, boot: S.boot, viewers: S.live ? S.live.viewers() : 0 })
   else if (MODE === 'review') S.link.send('state', { role: 'review', by: S.inspector || '' })
 }
 function onLinkMessage(event, p) {
-  if (event === 'state') { if (p.role && p.role !== MODE) { S.peer = p; S.peerSeen = Date.now(); renderLink() } return }
+  if (event.startsWith('rtc-')) { onRtc(event, p); return }
+  if (event === 'state') {
+    if (p.role && p.role !== MODE) {
+      if (MODE === 'review' && p.boot && S.peerBoot && p.boot !== S.peerBoot && S.live) S.live.close()   // the phone page reloaded: its old stream is gone, ask again
+      if (p.boot) S.peerBoot = p.boot
+      S.peer = p; S.peerSeen = Date.now(); renderLink()
+    }
+    return
+  }
   if (MODE === 'camera' && event === 'capture') { remoteCapture(p); return }
   if (MODE !== 'review') return
   if (event === 'ack' && S.capReq && p.req === S.capReq.req) {
@@ -671,12 +705,42 @@ function requestRemoteCapture() {
   S.capReq = { req, timer: setTimeout(() => { if (S.capReq && S.capReq.req === req) { S.capReq = null; toast('الموبايل ما ردّ — تأكدي إنو صفحة الكاميرا مفتوحة عليه'); renderLink() } }, ACK_WAIT_MS) }
   renderLink()
 }
+// WebRTC signaling rides on the link (live.js): the tablet asks, the phone offers, the tablet answers
+function onRtc(event, p) {
+  if (!S.live || !p) return
+  if (MODE === 'camera') { if (event === 'rtc-want') S.live.makeOffer(p.req); else if (event === 'rtc-answer') S.live.onAnswer(p.req, p.sdp); else if (event === 'rtc-ice') S.live.onIce(p.req, p.cand) }
+  else if (MODE === 'review') { if (event === 'rtc-offer') S.live.onOffer(p.req, p.sdp); else if (event === 'rtc-ice') S.live.onIce(p.req, p.cand); else if (event === 'rtc-fail') S.live.onFail(p.req, p.reason) }
+}
+// the tablet keeps a live view while the phone has a working camera and this page is visible; drops it otherwise
+function maintainLive() {
+  if (MODE !== 'review' || !S.live || !S.live.supported()) return
+  const alive = !!S.peer && Date.now() - S.peerSeen < PEER_TTL_MS
+  const can = alive && S.linkUp && S.peer.state !== 'nocam' && document.visibilityState === 'visible'
+  if (!can) { if (S.live.connecting() || S.live.live() || S.live.askedAt()) S.live.close(); S.liveLostAt = 0; renderLive(); return }
+  const now = Date.now()
+  if (S.live.live()) S.liveLostAt = 0
+  else if (!S.liveLostAt) S.liveLostAt = now
+  // a short stall (phone busy encoding a still, Wi-Fi hiccup) keeps the connection; a longer one asks for a fresh stream
+  const stalled = !!S.liveLostAt && now - S.liveLostAt > LIVE_GRACE_MS
+  if (!S.live.live() && (!S.live.askedAt() || (stalled && now - S.live.askedAt() > LIVE_RETRY_MS))) S.live.ask()   // first ask at once, later ones after a real stall
+  renderLive()
+}
+// the live tile: full width while waiting for a piece, a small corner tile (tap to enlarge) while one is being reviewed
+function renderLive() {
+  if (MODE !== 'review' || !S.live) return
+  const w = $('liveWrap'), reason = S.live.reason()
+  const live = S.live.live() || (!!S.liveLostAt && Date.now() - S.liveLostAt < LIVE_GRACE_MS && S.live.connecting())   // inside the grace window the last frame stays up
+  const show = live || S.live.connecting() || !!reason
+  w.hidden = !show; if (!show) return
+  w.classList.toggle('live', live); w.classList.toggle('small', !!S.reviewId && !S.liveBig)
+  $('liveCap').textContent = live ? '📡 مباشر من الموبايل' + (S.reviewId && !S.liveBig ? ' — كبسي للتكبير' : '') : reason ? '📡 ' + reason : '📡 عم وصل بث الكاميرا…'
+}
 // status line on both devices; on the tablet also the «📸» button (enabled only when the phone can shoot now)
 function renderLink() {
   const alive = !!S.peer && Date.now() - S.peerSeen < PEER_TTL_MS
   if (MODE === 'camera') {
     const m = $('camLink'); if (!S.link) { m.hidden = true; return }
-    m.textContent = !S.linkUp ? '🔌 عم وصل بشاشة المراجعة…' : alive ? `🧐 شاشة المراجعة متصلة${S.peer.by ? ' (' + S.peer.by + ')' : ''} — فيها تطلب الفحص من عندها` : '🧐 شاشة المراجعة مش مفتوحة — افتح ?mode=review عالتابلت'
+    m.textContent = (!S.linkUp ? '🔌 عم وصل بشاشة المراجعة…' : alive ? `🧐 شاشة المراجعة متصلة${S.peer.by ? ' (' + S.peer.by + ')' : ''} — فيها تطلب الفحص من عندها` : '🧐 شاشة المراجعة مش مفتوحة — افتح ?mode=review عالتابلت') + (S.live && S.live.viewers() ? ' · 📡 البث شغّال' : '')
     m.className = 'msg' + (alive ? ' ok' : ''); m.hidden = false; return
   }
   if (MODE !== 'review') return
@@ -756,7 +820,7 @@ async function openReview(h) {
     S.res = { garmentBox: h.garment_box || null }; S.incomplete = h.incomplete || null      // the phone's failed model calls must not read as «clean» here either
     S.findings = (rows || []).map((r) => ({ id: r.id, kind: r.kind, source: r.source, type: r.type, x: r.x, y: r.y, confidence: +r.confidence || 0, level: r.level, severity: r.severity, why: r.why || '', crop_path: r.crop_path, verdict: r.verdict || null, verdict_at: r.verdict_at || null, worker_name: r.worker_name || null, stage: r.stage || null, _workerId: r.worker_name ? String((S.workers.find((w) => w.name === r.worker_name) || {}).id || '') : '', unsure: /مش متأكد|شافوها بلاطتين/.test(r.why || '') }))
     S.decision = null
-    renderAll(); renderStrip(); $('decisionBar').hidden = false; $('tapHint').hidden = !S.imgW
+    renderAll(); renderStrip(); renderLive(); $('decisionBar').hidden = false; $('tapHint').hidden = !S.imgW
     stopTimer(); setProgress(`قطعة #${h.id} · ${h.order_number || ''} · ${hhmm(h.created_at)} — ${S.incomplete ? '⚠ الفحص ما كمل عالموبايل — ما تعتمدي على «ما لقت شي»' : S.findings.length ? S.findings.length + ' نقطة للمراجعة' : 'الكاميرا ما لقت شي — قرّري'}`)
   } catch (e) {
     stopTimer(); setProgress('ما قدرت أفتح القطعة: ' + msg(e)); S.reviewId = null
@@ -794,7 +858,7 @@ async function saveReview() {
     if (ex.length) await db.insertExamples(ex)
     S.reviewLocked = true; saveStatus('✓ انحفظت المراجعة — القطعة الجاية عم تنفتح', 'ok'); renderCards(); updateSaveEnabled()
     refreshStats()
-    setTimeout(() => { if (S.reviewId === id && S.reviewLocked) { S.reviewId = null; resetInspection(); renderCards(); setProgress('بانتظار قطعة من الكاميرا…'); $('progress').hidden = false; reviewTick() } }, 2500)
+    setTimeout(() => { if (S.reviewId === id && S.reviewLocked) { S.reviewId = null; resetInspection(); renderCards(); setProgress('بانتظار قطعة من الكاميرا…'); $('progress').hidden = false; renderLive(); reviewTick() } }, 2500)
   } catch (e) {
     saveStatus('ما انحفظت المراجعة: ' + msg(e), 'bad'); $('btnRetry').hidden = false
   } finally { S.reviewBusy = false; updateSaveEnabled() }
@@ -818,7 +882,7 @@ function newPiece() {
   if (S.running) { toast('في فحص شغّال — استنّي يخلص أو ألغيه'); return }
   if (MODE === 'review') {                                     // «قطعة جديدة» on the review screen = skip to the next pending piece
     if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm('المراجعة ما انحفظت — تتركها؟')) return
-    resetInspection(); setView('inspect'); $('cameraPanel').hidden = true; renderCards(); $('progress').hidden = false; setProgress('بانتظار قطعة من الكاميرا…'); reviewTick(); return
+    resetInspection(); setView('inspect'); $('cameraPanel').hidden = true; renderCards(); $('progress').hidden = false; setProgress('بانتظار قطعة من الكاميرا…'); renderLive(); reviewTick(); return
   }
   if (S.img && S.view === 'inspect' && !S.job && !confirm('هالفحص ما انحفظ — تتركو؟')) return
   resetInspection(); setView('camera'); renderCards()
