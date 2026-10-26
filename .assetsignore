@@ -1,0 +1,14 @@
+# not uploaded as static assets (same syntax as .gitignore)
+.git/
+.wrangler/
+node_modules/
+dev/node/
+dev/photos/
+dev/out/
+.dev.vars
+meta_key.txt
+supabase_demo.txt
+*.key
+.env
+.env.*
+worker/

@@ -1,0 +1,20 @@
+# SOLANG Vision QC — one-link deployment as a Cloudflare Worker with static assets (used by "Workers Builds" from GitHub,
+# or by `npx wrangler deploy` at the repo root). The same _worker.js also works as a Cloudflare Pages advanced-mode worker.
+#   /v1/responses  → proxied to the Meta API with the key kept as a secret (never in the repo, never in the browser)
+#   everything else → served from this folder (the station page is at /station/), see .assetsignore for what is left out
+# Secrets (dashboard → the Worker → Settings → Variables and Secrets): META_API_KEY (required), STATION_TOKEN (optional)
+name = "solang-vision-qc"
+main = "_worker.js"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./"
+binding = "ASSETS"
+not_found_handling = "none"
+
+[vars]
+DAILY_LIMIT = "400"
+MAX_BODY_MB = "25"
+
+[observability]
+enabled = true
