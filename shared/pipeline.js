@@ -28,7 +28,7 @@
 // Focus (shared/focus.js): with a SAM mask, tiles that hold no garment are not sent, the table around the garment is painted flat gray
 //   before a tile goes to Spark (img.jpeg({keep, fill})) and candidates that land outside the garment are dropped. No garment found →
 //   the run stops with result.noGarment (unless opts.requireGarment === false). opts.examples (array or Promise, ≤ 6 of
-//   {label:'defect'|'not_defect', type, note, b64}) ride along on the first verify look as labelled references from the same product.
+//   {label:'defect'|'not_defect', type, note, b64}) ride along on both verify looks as labelled references from the same product.
 //   opts.foreground (foregroundGrid of the station's empty-table photo) only adds the «clutter» framing warning.
 
 import { garmentGrid, framingCheck, clutterPct } from './focus.js'
@@ -82,10 +82,10 @@ export function parseSamBoxes(text) {
   return out
 }
 
-// Decode the largest mask of a SAM response with Meta's parser (@meta-sam/parser). Returns {raster, w, h, left, top} in the sent image's pixels, or null.
-export async function largestMask(text, samParser) {
-  if (!samParser || !text) return null
-  const { parseImageStream, recordsOfKind, decodeMaskToRaster } = samParser
+// All mask records of a SAM response, parsed with Meta's parser (@meta-sam/parser).
+async function samMaskRecords(text, samParser) {
+  if (!samParser || !text) return []
+  const { parseImageStream, recordsOfKind } = samParser
   async function* ev() {
     yield { type: 'response.output_text.delta', item_id: 'm', output_index: 0, content_index: 0, delta: text }
     yield { type: 'response.output_text.done', item_id: 'm', output_index: 0, content_index: 0, text }
@@ -94,10 +94,29 @@ export async function largestMask(text, samParser) {
   const parsed = parseImageStream(ev())
   for await (const _ of parsed) { /* drain snapshots */ }
   const res = await parsed.finalResult
-  const masks = recordsOfKind(res.records, 'mask')
+  return recordsOfKind(res.records, 'mask')
+}
+const maskOut = (m, samParser) => ({ raster: samParser.decodeMaskToRaster(m.mask), w: m.mask.width, h: m.mask.height, left: m.bounds.left, top: m.bounds.top })
+const maskArea = (mr) => (mr.bounds.right - mr.bounds.left) * (mr.bounds.bottom - mr.bounds.top)
+
+// The largest mask of a SAM response → {raster, w, h, left, top} in the sent image's pixels, or null.
+export async function largestMask(text, samParser) {
+  const masks = await samMaskRecords(text, samParser)
   if (!masks.length) return null
-  const m = masks.map(mr => ({ mr, a: (mr.bounds.right - mr.bounds.left) * (mr.bounds.bottom - mr.bounds.top) })).sort((p, q) => q.a - p.a)[0].mr
-  return { raster: decodeMaskToRaster(m.mask), w: m.mask.width, h: m.mask.height, left: m.bounds.left, top: m.bounds.top }
+  return maskOut(masks.map(mr => ({ mr, a: maskArea(mr) })).sort((p, q) => q.a - p.a)[0].mr, samParser)
+}
+// The mask that belongs to the chosen box (best IoU of its bounds with the box), not simply the largest of the response: SAM also returns
+// masks for other things it saw (the table, a second piece) and painting with the wrong one would gray out the garment itself.
+export async function maskForBox(text, samParser, box) {
+  const masks = await samMaskRecords(text, samParser)
+  if (!masks.length) return null
+  const iou = (bd) => {
+    const ix = Math.max(0, Math.min(bd.right, box.x2) - Math.max(bd.left, box.x1)), iy = Math.max(0, Math.min(bd.bottom, box.y2) - Math.max(bd.top, box.y1))
+    const inter = ix * iy, a = (bd.right - bd.left) * (bd.bottom - bd.top), bb = (box.x2 - box.x1) * (box.y2 - box.y1)
+    return inter / Math.max(1, a + bb - inter)
+  }
+  const best = masks.map(mr => ({ mr, s: iou(mr.bounds) })).sort((p, q) => q.s - p.s)[0]
+  return maskOut(best.s >= 0.3 ? best.mr : masks.map(mr => ({ mr, a: maskArea(mr) })).sort((p, q) => q.a - p.a)[0].mr, samParser)
 }
 
 // Silhouette metrics from a binary raster: lengths measured from the top-center anchor (waistband / collar), so a splayed leg or a bent sleeve
@@ -190,8 +209,8 @@ async function samRaw(api, concept, b64) {
 }
 
 // opts.examples may be an array or a promise of one (the station fetches the crops while SAM runs); anything broken → no references
-async function resolveExamples(ex) {
-  try { const list = await Promise.resolve(ex); return (Array.isArray(list) ? list : []).filter(e => e && typeof e.b64 === 'string' && e.b64.length > 100).slice(0, 6) } catch (e) { return [] }
+async function resolveExamples(ex, ms = 4000) {
+  try { const list = await Promise.race([Promise.resolve(ex), new Promise(res => setTimeout(() => res([]), ms))]); return (Array.isArray(list) ? list : []).filter(e => e && typeof e.b64 === 'string' && e.b64.length > 100).slice(0, 6) } catch (e) { return [] }
 }
 
 function boxesToFull(boxes, scale, region, minFrac) {
@@ -231,7 +250,7 @@ export async function inspect(img, opts) {
   // the parts SAM call needs only this downscaled copy, not the garment region: sent now, it overlaps the garment call (~5 s off branch G)
   const partsSam = g.part ? samRaw(api, g.part, small).then((text) => { usage.sam_calls += 1; return text }) : null
   if (partsSam) partsSam.catch(() => { /* reported as a parts warning when branch G awaits it */ })
-  let region = { x: 0, y: 0, w: W, h: H }, garmentBox = null, mask = null
+  let region = { x: 0, y: 0, w: W, h: H }, garmentBox = null, rawBox = null, mask = null, garmentFailed = false
   try {
     for (const c of [...new Set([g.concept, 'garment', 'clothing'])]) {
       const text = await samRaw(api, c, small); usage.sam_calls += 1
@@ -242,21 +261,22 @@ export async function inspect(img, opts) {
         const x1 = clamp(Math.round((b.x1 - padX) / scale), 0, W - 1), y1 = clamp(Math.round((b.y1 - padY) / scale), 0, H - 1)
         const x2 = clamp(Math.round((b.x2 + padX) / scale), x1 + 1, W), y2 = clamp(Math.round((b.y2 + padY) / scale), y1 + 1, H)
         garmentBox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1, concept: c, c: b.c }
+        rawBox = { x: clamp(Math.round(b.x1 / scale), 0, W), y: clamp(Math.round(b.y1 / scale), 0, H), w: Math.round((b.x2 - b.x1) / scale), h: Math.round((b.y2 - b.y1) / scale) }   // unpadded, for the edge test
         region = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
-        try { mask = await largestMask(text, opts.samParser) } catch (e) { warn('mask', e) }
+        try { mask = await maskForBox(text, opts.samParser, b) } catch (e) { warn('mask', e) }
         break
       }
     }
-  } catch (e) { warn('garment', e) }
+  } catch (e) { garmentFailed = true; warn('garment', e) }   // an API failure is NOT «no garment»: the run goes on over the whole frame and is flagged incomplete
   stageDone('garment', tG)
 
   // ── focus: where exactly the garment is (coarse grid from the mask) and how it sits in the frame
   let focus = null
   if (mask && opts.focus !== 'off') { try { focus = garmentGrid(mask, scale, W, H, { cell: opts.focusCell || 32, marginFrac: opts.focusMargin == null ? 0.02 : opts.focusMargin }) } catch (e) { warn('focus', e) } }
-  const framing = framingCheck({ focus, box: garmentBox, W, H })
+  const framing = framingCheck({ focus, box: garmentBox, rawBox, W, H })
   if (opts.foreground) { const cl = clutterPct(focus, opts.foreground); if (cl >= (opts.clutterPct == null ? 1.5 : opts.clutterPct)) framing.clutter = cl }
   progress('framing', framing)
-  if (!garmentBox && opts.requireGarment !== false) {          // nothing SAM would call a garment: say so instead of inspecting the table
+  if (!garmentBox && !garmentFailed && opts.requireGarment !== false) {          // nothing SAM would call a garment: say so instead of inspecting the table
     progress('nogarment', { foreground: opts.foreground ? opts.foreground.areaPct : null })
     timings.total = Date.now() - t0
     return { width: W, height: H, garmentBox: null, hasMask: false, noGarment: true, tiles: 0, candidates: [], verified: [], findings: [], parts: null, usage, timings, framing, focus: null }
@@ -291,7 +311,7 @@ export async function inspect(img, opts) {
 
     checkAbort()
     t = Date.now()
-    const examples = await resolveExamples(opts.examples)
+    const examples = candidates.length ? await resolveExamples(opts.examples) : []   // no candidates → no references needed, no wait for them
     usage.examples = examples.length
     progress('verify', { count: candidates.length, examples: examples.length })
     const win = opts.verifyWindow || 500
@@ -303,7 +323,7 @@ export async function inspect(img, opts) {
       const abs = { x: Math.round(x), y: Math.round(y), w: Math.min(win, W), h: Math.min(win, H) }
       try {
         const b64 = await img.jpeg({ ...abs, resize: { w: 1000, h: Math.round(1000 * abs.h / abs.w) } })
-        const r = await spark(api, refText + PROMPTS.verify, [...refImgs, b64], 'low')   // the references ride along on the first look only
+        const r = await spark(api, refText + PROMPTS.verify, [...refImgs, b64], 'low')   // the references ride along on both looks
         acct(r.usage)
         let j = r.json || {}
         const norm = (o) => ['defect', 'lint', 'texture', 'unsure'].includes(o.verdict) ? o.verdict : (o.defect === true ? 'defect' : 'unsure')
@@ -314,7 +334,7 @@ export async function inspect(img, opts) {
           const x3 = clamp(c.x - w3 / 2, 0, Math.max(0, W - w3)), y3 = clamp(c.y - w3 / 2, 0, Math.max(0, H - w3))
           const abs3 = { x: Math.round(x3), y: Math.round(y3), w: Math.min(w3, W), h: Math.min(w3, H) }
           const b3 = await img.jpeg({ ...abs3, resize: { w: 1000, h: Math.round(1000 * abs3.h / abs3.w) } })
-          const r3 = await spark(api, PROMPTS.verify, [b3], 'low')
+          const r3 = await spark(api, refText + PROMPTS.verify, [...refImgs, b3], 'low')   // same references: a not_defect example must be able to veto the 3x look too
           acct(r3.usage)
           second = r3.json || {}
           if (norm(second) === 'defect') { j = second; verdict = 'defect' }

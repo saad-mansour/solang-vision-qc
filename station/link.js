@@ -41,6 +41,7 @@ export function openLink({ url, key, station, onMessage, onStatus }) {
         else { status('error'); try { sock.close() } catch (e) { /* ignore */ } }
         return
       }
+      if ((d.event === 'phx_error' || d.event === 'phx_close') && d.topic === topic) { try { sock.close() } catch (e) { /* ignore */ } return }   // the channel died: reconnect
       if (d.event === 'broadcast' && d.payload && onMessage) {
         try { onMessage(String(d.payload.event || ''), d.payload.payload || {}) } catch (e) { console.warn('link message handler failed', e) }
       }

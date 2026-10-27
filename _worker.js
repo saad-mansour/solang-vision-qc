@@ -6,8 +6,10 @@
 // Set on the Pages project (Settings → Variables and Secrets):
 //   META_API_KEY   secret, required   — the Meta Model API key (never reaches the browser)
 //   STATION_TOKEN  secret, optional   — if set, the page must send it as X-Station-Token (station/config.js)
-//   DAILY_LIMIT    var, default 400   — requests per client IP per day (a public demo link cannot drain credits)
-//   MAX_BODY_MB    var, default 25    — request body cap (photo tiles travel as base64 JPEG inside the JSON)
+//   DAILY_LIMIT    var, default 400   — well-formed requests per client IP per day (a public demo link cannot drain credits)
+//   MAX_BODY_MB    var, default 8     — request body cap (a tile is ~0.4 MB of base64 JPEG, the mirror pair ~1 MB)
+// Also enforced: the request must carry this deployment's own Origin (browsers always send it on POST), the model allow-list,
+// reasoning effort low/medium only, no streaming. The real backstop for a public link is a spend cap on the Meta account.
 // Everything that is not /v1/* or /health is served from the deployed files by env.ASSETS.
 
 const META_BASE = 'https://api.meta.ai/v1'
@@ -33,20 +35,12 @@ async function proxy(request, env, url) {
 
   // same-origin only: the station page is served by this very deployment, so a browser Origin must match it (no CORS headers at all)
   const origin = request.headers.get('Origin')
-  if (origin && origin !== url.origin) return json(403, { error: 'origin not allowed' })
+  if (origin !== url.origin) return json(403, { error: 'origin not allowed' })
   if (env.STATION_TOKEN && request.headers.get('X-Station-Token') !== env.STATION_TOKEN) return json(401, { error: 'bad station token' })
   if (!env.META_API_KEY) return json(500, { error: 'META_API_KEY is not set (the Worker/Pages project → Settings → Variables and Secrets)' })
 
-  // per-IP daily limit
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
-  const key = ip + '|' + new Date().toISOString().slice(0, 10)
-  const n = (rate.get(key) || 0) + 1
-  rate.set(key, n)
-  if (rate.size > 5000) rate.clear()
-  if (n > parseInt(env.DAILY_LIMIT || '400', 10)) return json(429, { error: 'daily limit reached for this address' })
-
-  // body: size cap, JSON, model allow-list, no streaming
-  const maxBytes = parseFloat(env.MAX_BODY_MB || '25') * 1024 * 1024
+  // body: size cap, JSON, model allow-list, effort cap, no streaming
+  const maxBytes = parseFloat(env.MAX_BODY_MB || '8') * 1024 * 1024
   const declared = parseInt(request.headers.get('Content-Length') || '0', 10)
   if (declared > maxBytes) return json(413, { error: 'body too large' })
   const text = await request.text()
@@ -55,7 +49,15 @@ async function proxy(request, env, url) {
   try { body = JSON.parse(text) } catch (e) { return json(400, { error: 'invalid json' }) }
   if (!body || typeof body !== 'object') return json(400, { error: 'invalid json' })
   if (!ALLOWED_MODELS.has(body.model)) return json(400, { error: 'model not allowed: ' + String(body.model).slice(0, 60) })
+  if (body.reasoning && body.reasoning.effort != null && !['low', 'medium', 'minimal'].includes(body.reasoning.effort)) return json(400, { error: 'reasoning effort not allowed' })
   body.stream = false
+
+  // per-IP daily limit, counted for well-formed requests only; keys of past days are evicted, today's are never dropped
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown', today = new Date().toISOString().slice(0, 10), key = ip + '|' + today
+  if (rate.size > 5000) { for (const k of rate.keys()) if (!k.endsWith(today)) rate.delete(k); if (rate.size > 5000) return json(429, { error: 'too many clients today' }) }
+  const n = (rate.get(key) || 0) + 1
+  rate.set(key, n)
+  if (n > parseInt(env.DAILY_LIMIT || '400', 10)) return json(429, { error: 'daily limit reached for this address' })
 
   const up = await fetch(META_BASE + '/responses', {
     method: 'POST',

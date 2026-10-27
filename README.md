@@ -33,7 +33,7 @@ only server is a thin proxy that holds the API key. The method is documented in 
    answer: *defect / lint / texture / unsure*. If the first look is not "defect", a second opinion is asked on a 3×
    crop. Lint and texture are dropped unless two tiles agreed strongly, in which case they stay as amber "unsure".
    When the inspector has already judged crops of this product, up to 3 *defect* and 3 *not a defect* examples from
-   `vision_examples` ride along on the first look as labelled references — the learning loop.
+   `vision_examples` ride along on both looks as labelled references — the learning loop.
 5. **Silhouette from the SAM mask — no model call.** Leg or sleeve length is measured from the waistband/collar
    centre on the mask; a difference above 5 % (legs) or 6 % (sleeves) becomes a length finding.
 6. **Mirror comparison — SAM 3.1 + Muse Spark.** SAM finds the two legs (or sleeves); the right one is flipped
@@ -242,15 +242,18 @@ Without `?mode` one device does everything. HTTPS is required for the camera; ad
 - **No faces are recorded.** The camera points straight down at the table; inspectors' hands may appear at the edge
   of a frame before the stillness detector fires. Photos are of garments.
 - The Meta key lives only in the Worker secret (production) or `meta_key.txt` (local); the page gets a station token.
-  The proxy allow-lists models and paths, caps the body at 25 MB and applies a **per-IP daily limit** so a public demo
-  link cannot drain credits.
+  The proxy allow-lists models and paths, requires the page's own Origin, allows only `low`/`medium` reasoning effort,
+  caps the body at 8 MB and applies a **per-IP daily limit** (well-formed requests only, past days evicted) so a public
+  demo link cannot drain credits; a spend cap on the Meta account is the real backstop.
 - The publishable Supabase key can only insert into the demo bucket (no UPDATE, no DELETE policy): evidence photos
   cannot be overwritten or erased from the page. The demo tables themselves have RLS off (fake data, throwaway project).
 - The phone ⇄ tablet link is a **public Realtime channel** of the same throwaway project: anyone holding the demo key
-  could ask the phone to shoot (one piece per ~25 s at most, and the per-IP daily limit still applies to the phone). A
+  could ask the phone to shoot. The phone accepts at most one remote shot per 6 s, ignores replayed requests and, once a
+  **pairing code** is typed on both devices (tap the status line), ignores every request that is not signed with it. A
   production deployment would use private channels with Realtime authorization.
-- The live view uses **no STUN or TURN server**: only local-network candidates exist, so the camera stream can reach a
-  device on the same Wi-Fi and nothing on the internet, whoever asks for it. The video never touches a server.
+- The live view uses **no STUN or TURN server** and both sides exchange **only private / link-local / mDNS addresses**
+  (public candidates are dropped from offers, answers and trickle messages), so the stream cannot be set up with a peer
+  outside the local network even if that peer owns a public address. The video never touches a server.
 - The empty-table calibration photo (256 px gray) never leaves the phone: it lives in the browser's local storage.
 - The local dev proxy answers only same-origin requests from its own station page (no CORS on `/v1/*`, Host checked),
   so a page from another origin cannot spend the developer's key.

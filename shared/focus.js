@@ -7,7 +7,7 @@
 //       focus.has(X, Y)       → the full-res point lies on the garment, with a safety margin (dilated)
 //       focus.coverage(rect)  → share of the rect's cells on the dilated garment (0..1)
 //       focus.raw / focus.grid → undilated / dilated cell arrays (gw × gh), focus.cell = cell size in full-res px, focus.margin = cells
-//   framingCheck({focus, box, W, H}) → { cut: ['top'|'bottom'|'left'|'right'…], small: bool, areaPct }
+//   framingCheck({focus, box, rawBox, W, H}) → { cut: ['top'|'bottom'|'left'|'right'…], small: bool, areaPct }   (rawBox = unpadded box for the edge test)
 //       cut = the UNdilated garment reaches the photo edge (part of it is outside the frame); small = the SAM box is under smallPct of the frame
 //   foregroundGrid(cur, bg, w, h, {W, H, cell, z}) → { gw, gh, cell, grid, areaPct }
 //       cur/bg = gray Uint8 arrays of the same small size; pixels that differ from the empty table after exposure normalisation
@@ -69,8 +69,9 @@ export function garmentGrid(mask, scale, W, H, { cell = 32, marginFrac = 0.02 } 
   }
 }
 
-export function framingCheck({ focus, box, W, H, smallPct = 6, edgeCells = 1, edgeFrac = 0.01 } = {}) {
+export function framingCheck({ focus, box, rawBox, W, H, smallPct = 6, edgeCells = 1, edgeFrac = 0.01 } = {}) {
   const cut = []
+  const eb = rawBox || box                       // the edge test wants the UNpadded box (the padded one is clamped to the frame and always «touches»)
   if (focus) {
     const { raw, gw, gh } = focus
     const any = (pred) => { for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) if (raw[y * gw + x] && pred(x, y)) return true; return false }
@@ -78,11 +79,11 @@ export function framingCheck({ focus, box, W, H, smallPct = 6, edgeCells = 1, ed
     if (any((x, y) => y >= gh - edgeCells)) cut.push('bottom')
     if (any((x) => x < edgeCells)) cut.push('left')
     if (any((x) => x >= gw - edgeCells)) cut.push('right')
-  } else if (box) {
-    if (box.y <= edgeFrac * H) cut.push('top')
-    if (box.y + box.h >= (1 - edgeFrac) * H) cut.push('bottom')
-    if (box.x <= edgeFrac * W) cut.push('left')
-    if (box.x + box.w >= (1 - edgeFrac) * W) cut.push('right')
+  } else if (eb) {
+    if (eb.y <= edgeFrac * H) cut.push('top')
+    if (eb.y + eb.h >= (1 - edgeFrac) * H) cut.push('bottom')
+    if (eb.x <= edgeFrac * W) cut.push('left')
+    if (eb.x + eb.w >= (1 - edgeFrac) * W) cut.push('right')
   }
   const areaPct = box ? Math.round(1000 * (box.w * box.h) / (W * H)) / 10 : 0
   return { cut, small: !!box && areaPct < smallPct, areaPct }
@@ -118,7 +119,7 @@ export function foregroundGrid(cur, bg, w, h, { W, H, cell = 32, z = 0.9, minSha
 // share of the frame (%) that differs from the empty table but is not the garment (even with an extra margin for its shadow)
 export function clutterPct(focus, fg, extraCells = 2) {
   if (!fg) return 0
-  if (!focus) return fg.areaPct
+  if (!focus) return 0                        // without a garment grid the garment itself would count as clutter: no warning then
   if (focus.gw !== fg.gw || focus.gh !== fg.gh) return 0
   const wide = dilate(focus.grid, focus.gw, focus.gh, extraCells)
   let n = 0

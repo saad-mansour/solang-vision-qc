@@ -14,7 +14,7 @@ not_found_handling = "none"
 
 [vars]
 DAILY_LIMIT = "400"
-MAX_BODY_MB = "25"
+MAX_BODY_MB = "8"
 
 [observability]
 enabled = true

@@ -209,7 +209,11 @@ Events (app.js, only in `?mode=camera` / `?mode=review`; a single-device page op
 | `rtc-want` / `rtc-offer` / `rtc-answer` / `rtc-ice` / `rtc-fail` | tablet / phone | `{req, sdp?, cand?, reason?}` | WebRTC signaling for the live view, see §8. |
 
 The camera's `state` also carries `boot` (identity of the page load — a change tells the tablet its stream is gone) and `viewers`;
-while a run is in progress its `note` is the progress line plus the framing warning, so the tablet mirrors both.
+while a run is in progress its `note` is the progress line plus the framing warning, so the tablet mirrors both; `err` carries the last
+run's failure («الفحص ما كمل …» / «ما لقيت قطعة») while it is on the phone's screen, `code` says whether the phone requires a pairing code.
+**Pairing code** (optional, `localStorage['vqc_link_code']`, set by tapping the status line on either device): `capture` and `rtc-want`
+carry `sig = sha256(code|req)` hex; a phone with a code set answers unsigned or wrong requests with ack / rtc-fail «رمز الربط مش مطابق»,
+ignores replayed `req`s and accepts one remote shot per 6 s.
 
 The phone, on `capture`: refuses while a run is in progress; restarts its camera if it had stopped; leaves the previous result (its upload goes on detached); shoots 350 ms after switching back to the live view. The tablet's button is enabled only when the phone is `idle`, `uploading` or `nocam` (the press then tries to revive the camera).
 
@@ -223,7 +227,7 @@ import { makeSender, makeViewer, supported } from './live.js'
 //         live.ask() · live.onOffer(req, sdp) · live.onIce(req, cand) · live.onFail(req, reason) · live.live() · live.connecting() · live.reason() · live.askedAt() · live.close()
 ```
 
-- `RTCPeerConnection({ iceServers: [] })` on both sides — **no STUN / TURN**: host candidates only, so the stream works between devices on the same Wi-Fi and cannot be received from outside it (the demo key is public).
+- `RTCPeerConnection({ iceServers: [] })` on both sides — **no STUN / TURN** — and `privateCandidate()` / `privateSdp()` drop every candidate that is not private (10/8, 172.16/12, 192.168/16, 169.254/16, fc00::/7, fe80::/10, `.local`) from what is sent *and* from what is accepted, so a peer outside the local network cannot complete ICE even with a public address of its own (the demo key is public).
 - The phone sends its real camera track (stills keep the full capture size) with `maxBitrate 800 kbit/s · maxFramerate 15 · scaleResolutionDownBy → ~960 px`; one `RTCPeerConnection` per asking tablet, at most 3 (oldest dropped).
 - The offer goes out when ICE gathering completes or after 1.2 s; candidates found before that are re-sent as `rtc-ice` after the offer (duplicates are harmless), candidates found later trickle.
 - The tablet asks only while the phone's `state` says it has a camera and the tablet page is visible; it asks again when no frame arrived for 8 s, closes on a `boot` change of the phone, and shows the failure reason (or the «same Wi-Fi» hint after a silent attempt). `live()` is true only while frames arrive (`track` live, not muted, `video.readyState ≥ 2`).
