@@ -1,0 +1,123 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 0,
+  "y": 1760,
+  "w": 4284,
+  "h": 2449,
+  "concept": "sweatshirt",
+  "c": 0.8787879347801208
+ },
+ "hasMask": true,
+ "tiles": 11,
+ "candidates": [
+  {
+   "x": 1070,
+   "y": 3071,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.78,
+   "why": "dark irregular smudge on white fabric",
+   "hits": 1
+  }
+ ],
+ "verified": [
+  {
+   "x": 1070,
+   "y": 3071,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.78,
+   "why": "dark irregular smudge on white fabric",
+   "hits": 1,
+   "window": {
+    "x": 820,
+    "y": 2821,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "texture",
+   "vtype": "none",
+   "vconfidence": 0.9,
+   "severity": "minor",
+   "vwhy": "Center is white backing paper with a table mark, not garment fabric, so no manufacturing defect.",
+   "second": {
+    "verdict": "lint",
+    "confidence": 0.75
+   }
+  }
+ ],
+ "findings": [],
+ "parts": {
+  "part": "sleeve",
+  "measure": "sleeve",
+  "boxes": [
+   {
+    "x1": 0,
+    "y1": 2127.72,
+    "x2": 1349.46,
+    "y2": 2888.13,
+    "c": 0.9101123809814453
+   },
+   {
+    "x1": 2923.83,
+    "y1": 2088.45,
+    "x2": 4280.43,
+    "y2": 2880.99,
+    "c": 0.949367105960846
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 3,
+   "reachDiffPct": 1.4,
+   "cx": 508
+  },
+  "lengthDiffPct": 1.4,
+  "mirror": {
+   "different": false,
+   "confidence": 0.92,
+   "differences": [],
+   "why": "Both sleeves show the same single-panel construction with the armhole seam in the same mirrored position and no extra or missing seams, with apparent print and cuff-edge variation explained by crop, lay and lighting.",
+   "votes": [
+    false,
+    false
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 32659,
+  "output_tokens": 9304,
+  "calls": 16,
+  "sam_calls": 2,
+  "examples": 0
+ },
+ "timings": {
+  "garment": 2537,
+  "tiles": 8566,
+  "verify": 10329,
+  "silhouette": 4,
+  "parts": 17634,
+  "global": 6130,
+  "total": 21439
+ },
+ "framing": {
+  "cut": [
+   "left"
+  ],
+  "small": false,
+  "areaPct": 42.9
+ },
+ "focus": {
+  "tiles": 15,
+  "sent": 11,
+  "skipped": 4,
+  "droppedOutside": 0,
+  "painted": true,
+  "marginPx": 128
+ }
+}

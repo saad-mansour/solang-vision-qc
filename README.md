@@ -20,14 +20,20 @@ One photo (typically 4284×5712 from a phone camera) goes through seven steps. E
 only server is a thin proxy that holds the API key. The method is documented in [`shared/pipeline.js`](shared/pipeline.js).
 
 1. **Find the garment — SAM 3.1.** A downscaled copy is sent with a concept prompt (`pants`, `sweatshirt`, …).
-   The largest box becomes the working region (table clutter dropped) and the one-bit **mask** is kept.
+   The largest box becomes the working region and the one-bit **mask** becomes a coarse garment grid (32 px cells, 2 %
+   margin, [`shared/focus.js`](shared/focus.js)): it decides which tiles are worth sending, paints the table inside each
+   tile flat gray, drops candidates that land off the garment and raises the framing warnings (garment cut by the frame
+   edge, too small, something else on the table). No box at all → the run stops with «no garment» instead of inspecting
+   the floor.
 2. **Tiles at full resolution — Muse Spark.** The garment region is cut into overlapping 1200 px tiles
-   (200 px overlap). Each tile is inspected for *local* defects, in parallel (6 at a time), and answers in a 0–1000
-   grid that is mapped back to photo pixels.
+   (200 px overlap); tiles with less than 8 % garment in them are not sent. Each tile is inspected for *local* defects,
+   in parallel (10 at a time), and answers in a 0–1000 grid that is mapped back to photo pixels.
 3. **Merge.** The same spot seen in two overlapping tiles becomes one candidate (and counts as two hits).
 4. **Verify crops — Muse Spark.** Every candidate is re-checked on a 2× magnified 500 px crop with a tri-state
    answer: *defect / lint / texture / unsure*. If the first look is not "defect", a second opinion is asked on a 3×
    crop. Lint and texture are dropped unless two tiles agreed strongly, in which case they stay as amber "unsure".
+   When the inspector has already judged crops of this product, up to 3 *defect* and 3 *not a defect* examples from
+   `vision_examples` ride along on the first look as labelled references — the learning loop.
 5. **Silhouette from the SAM mask — no model call.** Leg or sleeve length is measured from the waistband/collar
    centre on the mask; a difference above 5 % (legs) or 6 % (sleeves) becomes a length finding.
 6. **Mirror comparison — SAM 3.1 + Muse Spark.** SAM finds the two legs (or sleeves); the right one is flipped
@@ -139,7 +145,25 @@ The raw result JSONs and the annotated JPEGs of that run are committed in [`dev/
 **Timing (Oct 27):** the parts/mirror comparison and the whole-garment pass now run side by side, and the parts SAM call is sent
 while the garment is still being located; the station sends up to 10 tile calls at once (was 6). IMG_1286: 22.3 → 21.6 s on the
 same findings — the remaining critical path is the two mirror calls (~17 s). A 12 MP phone photo that took 39 s on the old
-ordering should land around 25 s (estimate, not yet measured on the phone).
+ordering should land around 25 s (estimate, not yet measured on the phone). Measured on the phone that evening: 31.5 s.
+
+**Re-run, Oct 27 (garment focus on, 10 tiles at a time, no learning examples in the harness):** the same 7 photos through
+the pipeline as it is now — tiles without garment skipped, table painted out inside each tile, off-garment candidates dropped.
+
+| Photo | Known defect | Oct 26 | Oct 27 | Time |
+|---|---|---|---|---|
+| IMG_1284 | short leg | silhouette amber 69 % | silhouette amber 69 % · plus a `hole` red 85 % and a `stain` amber 65 % not in the known list (not yet checked on the piece) | 22.9 s |
+| IMG_1285 | double seam | missed | missed; 4 of 15 tiles were pure table and were not sent; framing warned «cut: left» (a sleeve touches the frame edge) | 21.6 s |
+| IMG_1286 | collar threads + hole | red 90 % · amber 75 % | threads red 85 % · hole red 80 % · plus a `stain` amber 65 % | 19.5 s |
+| IMG_1288 | tiny hole | missed | missed (0 candidates) | 20.8 s |
+| IMG_1289 | small snag | amber 65 % | 0 in the first run; an A/B right after: **found in 2 of 2 runs with focus** (62 %, 70 %) and in 1 of 2 without (65 %, miss) — tile detection is stochastic at `low` effort | 12.6–18.8 s |
+| IMG_1290 | seam asymmetry | mirror red 85 % | mirror red 85 % (2 of 2 votes) · the same 2 amber «unsure» lint flags | 19.5 s |
+| IMG_1292 | frayed bow + faint stain | global `print` red 85 % | global `print` red 85 % · plus mirror `asymmetry` red 90 % (the sleeve bows differ left vs right — plausible, to be checked on the piece) | 21.0 s |
+
+Reading: no known defect found on Oct 26 was lost; three new flags appeared that are not in the known list and need a
+look at the garments; every photo now runs in 12.6–22.9 s (was 20.1–39.6 s); painting the table out did not hurt
+detection (the A/B above) and tiles were skipped only where the box held pure table. Garment found on all 7 (SAM box
+0.55–0.97). The Oct 27 result JSONs and annotated JPEGs are in [`dev/out/annotated/oct27/`](dev/out/annotated/oct27/).
 
 ## Repo layout
 
@@ -227,20 +251,35 @@ Without `?mode` one device does everything. HTTPS is required for the camera; ad
   production deployment would use private channels with Realtime authorization.
 - The live view uses **no STUN or TURN server**: only local-network candidates exist, so the camera stream can reach a
   device on the same Wi-Fi and nothing on the internet, whoever asks for it. The video never touches a server.
+- The empty-table calibration photo (256 px gray) never leaves the phone: it lives in the browser's local storage.
 - The local dev proxy answers only same-origin requests from its own station page (no CORS on `/v1/*`, Host checked),
   so a page from another origin cannot spend the developer's key.
 - Model output is free text; the UI builds DOM with `textContent` only, never `innerHTML`.
 
 ## Roadmap
 
-- Feed confirmed / rejected crops from `vision_examples` back into the verify prompt as few-shot examples per model.
+- The learning loop is wired (confirmed / rejected crops per model ride along in the verify prompt); next: measure its
+  effect on repeated false alarms over a week of real inspections.
 - Known-good reference photo per order (the global pass already accepts one).
 - Recall on tiny holes and faint stains: smaller tiles or a second tile pass on dark/plain fabrics; the 3 misses above
   are all of this kind.
 - Fewer extra amber flags: use the inspector's rejections per fabric to raise the amber threshold where lint is common.
-- Speed: the mirror/global branch already runs concurrently with the tiles; the next step is to overlap the single
-  global call with the mirror step and to skip the mirror step for garments where it never finds anything.
+- Speed: every stage that can overlap now does; what is left is the two mirror calls (~17 s at `medium` effort) — try
+  `low` effort with a third vote — and a lighter photo upload from the phone.
 - Integration with the factory's production system (order list, worker attribution to the real salary codes).
+
+## Build log
+
+Everything in this repo was written after the hackathon opened on Oct 26; the commit history is the detailed record. In short:
+
+- **Oct 26 (day 1):** probes of SAM 3.1 and Muse Spark on factory photos → pipeline (tiles, verify, silhouette, mirror,
+  global) → Node harness and the 7-photo run above → browser station (camera, stillness detector, circles, cards, save to
+  the demo Supabase) → adversarial review and fixes → one-link deployment (Worker built from GitHub).
+- **Oct 27 (night):** first real test with a phone above a table at home → two-device mode (phone = camera, tablet = review)
+  → the tablet's shoot button over a Realtime channel → live view of the phone camera (WebRTC, LAN only) → pipeline
+  reordering (−8 s) → garment focus, framing warnings, empty-table calibration, learning loop, 7-photo re-run.
+
+Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.
 
 ## License
 

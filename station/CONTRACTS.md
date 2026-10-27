@@ -101,6 +101,8 @@ img.width, img.height                    // ints, after orientation
 await img.jpeg({x, y, w, h, resize, mirror}) → base64 string WITHOUT the "data:image/jpeg;base64," prefix
    // crop rect in full-res pixels (clamp to the image); resize = {w,h} optional target size; mirror = true → flip horizontally
    // JPEG quality 0.9. Use OffscreenCanvas when available else a detached <canvas>. Never exceed 4096 px on a side for the output canvas.
+   // keep(X, Y) → false paints that output pixel `fill` ([r,g,b], default mid gray): the pipeline hides the table around the garment this way
+   // (shared/focus.js grid in full-res coordinates). The Node harness adapter implements the same option with sharp.
 await img.blob({x, y, w, h, resize, quality})   → Blob 'image/jpeg' (same semantics; used for uploads/crops; default quality 0.92)
 await img.previewUrl(maxSide = 1600)      → object URL of a downscaled JPEG for display (cache it; revoke in close())
 img.close()                              // free the bitmap and revoke URLs
@@ -154,15 +156,35 @@ Pipeline call (exact):
 ```js
 import { inspect } from '../shared/pipeline.js'
 import * as samParser from './vendor/meta-sam-parser/index.js'
-const res = await inspect(img, { api: wrappedApi, samParser, garment: order.garment, onProgress, concurrency: 10, signal: controller.signal })
+const res = await inspect(img, { api: wrappedApi, samParser, garment: order.garment, onProgress, concurrency: 10, signal: controller.signal,
+  examples,            // Promise of ≤ 6 {label:'defect'|'not_defect', type, note, b64} from vision_examples of this model (loadExamples), or []
+  foreground,          // foregroundGrid() of the photo vs the stored empty-table photo, or null
+  requireGarment: true })   // no SAM box → res.noGarment, zero model calls beyond SAM, nothing saved
 // After the garment is found the pipeline runs two branches concurrently (local: tiles → verify · global: silhouette → parts/mirror ∥ global),
 // so progress events interleave; onProgress('stage_done', {stage, ms}) fires after each stage. With `signal` aborted, inspect() rejects
 // with an Error whose name is 'AbortError' (treat as cancel, not failure).
-// res = { width, height, garmentBox, hasMask, tiles, candidates, verified, findings:[{kind, source, type, x, y, confidence, level, severity, why, window?, unsure?, hits?}], parts, usage:{input_tokens, output_tokens, calls, sam_calls}, timings:{garment, tiles, verify, silhouette, parts, global, total} }
+// res = { width, height, garmentBox, hasMask, tiles, candidates, verified, findings:[{kind, source, type, x, y, confidence, level, severity, why, window?, unsure?, hits?}], parts, usage:{input_tokens, output_tokens, calls, sam_calls, examples}, timings:{garment, tiles, verify, silhouette, parts, global, total},
+//         framing:{cut:[side…], small, areaPct, clutter?}, focus:{tiles, sent, skipped, droppedOutside, painted, marginPx} | null, noGarment? }
+// Progress adds 'framing' (right after SAM — show it at once), 'nogarment', tiles{skipped}, verify{examples}.
 ```
 Cost line to show after a run: `~$` = `(input_tokens*1.25 + output_tokens*4.25)/1e6 + 0.0025*sam_calls`, and `timings.total/1000` s.
 
 Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Desktop testing uses the file button with `dev/photos/*.jpg` (gitignored) — the whole pipeline must run in the browser exactly as on the tablet.
+
+### §6 additions (Oct 27) — focus, framing, empty table, learning loop, no hijack
+
+- **Camera panel** gets a row «🧹 صوّر الطاولة فاضية» + status + «🗑»: one photo of the empty table per station and camera facing, stored on the
+  device only (`localStorage['vqc_bg_<STATION>_<facing>']`, 256 px luma, ~64 KB). Before every run the photo is compared with it
+  (`foregroundGrid`) and the result goes to the pipeline as `opts.foreground` — it only feeds the «clutter» warning.
+- **Inspection panel** gets `#frameWarn` (amber): filled from the pipeline's `framing` event ~5 s into the run and from `result.framing`
+  on the review screen (`recentInspections` selects `framing:result->framing`). Texts: «القطعة طالعة برّا الكادر من …», «القطعة صغيرة
+  بالصورة — قرّب الكاميرا», «في شي غير القطعة عالطاولة — شيلو». The camera device also puts the text into its link `state.note`.
+- **No garment** (`res.noGarment`): progress «ما لقيت قطعة واضحة تحت الكاميرا», save disabled with a hint, nothing auto-saved on the camera
+  device (it says so in `#camLast` and returns to the camera after 4 s).
+- **Learning loop**: before `inspect()` the station calls `db.examplesFor(model_code, 30)`, keeps the newest 3 `defect` + 3 `not_defect`
+  rows with a crop, downscales each crop to 400 px and hands the array promise to the pipeline; the cost line shows «🧠 N أمثلة».
+- **Review screen never hijacks**: a pending piece opens by itself only on the waiting screen (`view === 'inspect'`, no piece, no image).
+  While the inspector browses an old piece (history view) a new arrival only beeps + toasts; «⬅ رجوع للمراجعة» returns to waiting.
 
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)
 
@@ -186,7 +208,8 @@ Events (app.js, only in `?mode=camera` / `?mode=review`; a single-device page op
 | `saved` | camera | `{id}` | the auto-save finished (row released with `photo_path`): the tablet polls right away. |
 | `rtc-want` / `rtc-offer` / `rtc-answer` / `rtc-ice` / `rtc-fail` | tablet / phone | `{req, sdp?, cand?, reason?}` | WebRTC signaling for the live view, see §8. |
 
-The camera's `state` also carries `boot` (identity of the page load — a change tells the tablet its stream is gone) and `viewers`.
+The camera's `state` also carries `boot` (identity of the page load — a change tells the tablet its stream is gone) and `viewers`;
+while a run is in progress its `note` is the progress line plus the framing warning, so the tablet mirrors both.
 
 The phone, on `capture`: refuses while a run is in progress; restarts its camera if it had stopped; leaves the previous result (its upload goes on detached); shoots 350 ms after switching back to the live view. The tablet's button is enabled only when the phone is `idle`, `uploading` or `nocam` (the press then tries to revive the camera).
 

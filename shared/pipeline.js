@@ -11,7 +11,7 @@
 //   7. Muse Spark (global) — whole garment (downscaled) + optional reference → misplaced print, missing part, twisted seams
 // Coordinates everywhere are full-resolution photo pixels unless stated. Spark is asked for 0–1000 grid coords (its native grounding format).
 //
-// Dependencies are injected so this file has none:
+// Dependencies are injected so this file has none besides ./focus.js (pure grid helpers):
 //   api.responses(body) → Promise<json>          (Meta Model API /v1/responses, via proxy in the browser)
 //   img.width, img.height                        (photo size after EXIF rotation)
 //   img.jpeg({x,y,w,h, resize, mirror}) → Promise<base64 string without data: prefix>
@@ -23,9 +23,18 @@
 //                      the parts SAM call is sent right after step 1's downscale, so it overlaps the garment SAM call
 // so per-stage timings overlap; timings.total is wall-clock. opts.signal (AbortSignal) is checked before every stage and before every
 // tile / verify item: when aborted, inspect() rejects with an Error whose name is 'AbortError'.
-// Progress events: garment · tiles{count} · tile{i,n,defects} · verify{count} · parts{part} · global · warn{stage,error} · stage_done{stage,ms}
+// Progress events: garment · framing{cut,small,areaPct,clutter?} · nogarment · tiles{count,skipped} · tile{i,n,defects} · verify{count,examples} ·
+//   parts{part} · global · warn{stage,error} · stage_done{stage,ms}
+// Focus (shared/focus.js): with a SAM mask, tiles that hold no garment are not sent, the table around the garment is painted flat gray
+//   before a tile goes to Spark (img.jpeg({keep, fill})) and candidates that land outside the garment are dropped. No garment found →
+//   the run stops with result.noGarment (unless opts.requireGarment === false). opts.examples (array or Promise, ≤ 6 of
+//   {label:'defect'|'not_defect', type, note, b64}) ride along on the first verify look as labelled references from the same product.
+//   opts.foreground (foregroundGrid of the station's empty-table photo) only adds the «clutter» framing warning.
+
+import { garmentGrid, framingCheck, clutterPct } from './focus.js'
 
 export const MODELS = { spark: 'muse-spark-1.3', sam: 'sam-3.1' }
+const FILL = [128, 128, 128]                 // what the table becomes inside a tile (the tile prompt names it)
 
 export const GARMENTS = {
   // concept for SAM, paired part to compare, kind of length measurement
@@ -42,11 +51,14 @@ export const PROMPTS = {
   tile: 'You are a strict garment quality inspector in a children\'s clothing factory. This is ONE TILE cut from a high-resolution top-down photo of a garment lying flat on a table. ' +
     'Look only at fabric and seams. Report REAL manufacturing defects only: hole, snag/pull, stain or discoloration, loose or hanging thread, broken/skipped/double stitching, puckering, unfinished edge. ' +
     'Ignore printed designs, intended decorations, fabric texture or heather, wrinkles, shadows, the table, labels and the tile edges. ' +
+    'Flat mid-gray areas are OUTSIDE the garment (painted out on purpose): ignore them completely and never report their border. ' +
     'Answer ONLY JSON: {"defects":[{"type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge","x":0-1000,"y":0-1000,"confidence":0-1,"why":"short"}]}. Coordinates are on a 0-1000 grid of THIS tile, (0,0) top-left. If nothing, {"defects":[]}.',
   verify: 'You are a strict garment quality inspector. This is a 2x magnified crop (about 5x5 cm of fabric) around a spot that an automatic pass flagged as a possible defect, from a children\'s garment lying flat. ' +
     'Decide what is at or near the center. verdict "defect": a real manufacturing defect (hole, snag/pull, stain or discoloration, loose thread attached to a seam or hanging from the fabric, broken/skipped/double stitching, puckering, unfinished edge). ' +
     'verdict "lint": a removable surface fiber, dust or fluff lying on the fabric. verdict "texture": normal fabric texture/heather, a printed design, a wrinkle or a shadow. verdict "unsure": you cannot tell at this magnification. ' +
     'Answer ONLY JSON: {"verdict":"defect|lint|texture|unsure","type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge|none","confidence":0-1,"severity":"minor|major","why":"one sentence"}',
+  verifyRefs: (k) => `The first ${k} image${k > 1 ? 's are' : ' is'} REFERENCE crop${k > 1 ? 's' : ''} from earlier pieces of this SAME product, each already judged by the human inspector as listed. ` +
+    'Use them to tell this product\'s normal prints, seams, labels and texture apart from real defects. The LAST image is the spot to judge now. ',
   mirror: (part) => `Image 1 is the LEFT ${part} of a children's garment lying flat (top-down). Image 2 is the RIGHT ${part}, flipped horizontally so it should look like a mirror image of the left one. ` +
     'Compare the construction: seam lines and their positions along the body, panel shapes, pocket or decoration position, stitching lines. Ignore wrinkles, lighting, shadows, how the fabric is laid, the angle of the hem/cuff edge (it depends on the lay), and differences in where the crop was cut. ' +
     'Are there real construction differences a quality inspector would reject (seams in different positions or angles, missing or extra seam, different panel shape, decoration in a different place)? ' +
@@ -177,6 +189,11 @@ async function samRaw(api, concept, b64) {
   return outputText(await api.responses(body))
 }
 
+// opts.examples may be an array or a promise of one (the station fetches the crops while SAM runs); anything broken → no references
+async function resolveExamples(ex) {
+  try { const list = await Promise.resolve(ex); return (Array.isArray(list) ? list : []).filter(e => e && typeof e.b64 === 'string' && e.b64.length > 100).slice(0, 6) } catch (e) { return [] }
+}
+
 function boxesToFull(boxes, scale, region, minFrac) {
   return boxes.map(b => ({ x1: b.x1 / scale, y1: b.y1 / scale, x2: b.x2 / scale, y2: b.y2 / scale, c: b.c }))
     .filter(b => {
@@ -233,17 +250,33 @@ export async function inspect(img, opts) {
   } catch (e) { warn('garment', e) }
   stageDone('garment', tG)
 
+  // ── focus: where exactly the garment is (coarse grid from the mask) and how it sits in the frame
+  let focus = null
+  if (mask && opts.focus !== 'off') { try { focus = garmentGrid(mask, scale, W, H, { cell: opts.focusCell || 32, marginFrac: opts.focusMargin == null ? 0.02 : opts.focusMargin }) } catch (e) { warn('focus', e) } }
+  const framing = framingCheck({ focus, box: garmentBox, W, H })
+  if (opts.foreground) { const cl = clutterPct(focus, opts.foreground); if (cl >= (opts.clutterPct == null ? 1.5 : opts.clutterPct)) framing.clutter = cl }
+  progress('framing', framing)
+  if (!garmentBox && opts.requireGarment !== false) {          // nothing SAM would call a garment: say so instead of inspecting the table
+    progress('nogarment', { foreground: opts.foreground ? opts.foreground.areaPct : null })
+    timings.total = Date.now() - t0
+    return { width: W, height: H, garmentBox: null, hasMask: false, noGarment: true, tiles: 0, candidates: [], verified: [], findings: [], parts: null, usage, timings, framing, focus: null }
+  }
+  const paint = !!focus && opts.focus !== 'tiles'                // 'paint' (default): gray out the table inside each tile · 'tiles': only skip empty tiles
+
   // ── branch L: 2) tiles → Spark (local defects), then 3) verify each candidate on a 2x crop (tri-state)
   async function localBranch() {
     checkAbort()
     let t = Date.now()
-    const tiles = tileGrid(region.w, region.h, opts.tileSize || 1200, opts.overlap || 200)
-    progress('tiles', { count: tiles.length })
+    const allTiles = tileGrid(region.w, region.h, opts.tileSize || 1200, opts.overlap || 200)
+    const minCov = opts.minTileCoverage == null ? 0.08 : opts.minTileCoverage
+    // a tile with (almost) no garment in it is table: not sent at all
+    const tiles = focus ? allTiles.filter(tl => focus.coverage({ x: region.x + tl.x, y: region.y + tl.y, w: tl.w, h: tl.h }) >= minCov) : allTiles
+    progress('tiles', { count: tiles.length, skipped: allTiles.length - tiles.length })
     const tileResults = await mapLimit(tiles, conc, async (tl, i) => {
       checkAbort()
       const abs = { x: region.x + tl.x, y: region.y + tl.y, w: tl.w, h: tl.h }
       try {
-        const b64 = await img.jpeg(abs)
+        const b64 = await img.jpeg(paint ? { ...abs, keep: focus.has, fill: FILL } : abs)   // table painted out: the model only sees fabric
         const r = await spark(api, PROMPTS.tile, [b64], 'low')   // minimal was faster but missed a known hole 1 run in 3
         acct(r.usage)
         const defects = ((r.json && r.json.defects) || []).map(d => ({ ...gridToPx(d.x, d.y, abs), type: String(d.type || 'other'), confidence: clamp(+d.confidence || 0, 0, 1), why: d.why || '' }))
@@ -251,20 +284,26 @@ export async function inspect(img, opts) {
         return { tile: abs, defects }
       } catch (e) { warn('tile', e, { i }); return { tile: abs, defects: [], error: String((e && e.message) || e) } }
     })
-    const candidates = mergeCandidates(tileResults.flatMap(r => r.defects))
+    const merged = mergeCandidates(tileResults.flatMap(r => r.defects))
+    const candidates = focus ? merged.filter(c => focus.has(c.x, c.y)) : merged   // a spot on the table is not a garment defect
+    const droppedOutside = merged.length - candidates.length
     stageDone('tiles', t)
 
     checkAbort()
     t = Date.now()
-    progress('verify', { count: candidates.length })
+    const examples = await resolveExamples(opts.examples)
+    usage.examples = examples.length
+    progress('verify', { count: candidates.length, examples: examples.length })
     const win = opts.verifyWindow || 500
+    const refText = examples.length ? PROMPTS.verifyRefs(examples.length) + examples.map((e, i) => `Image ${i + 1}: ${e.label === 'defect' ? 'DEFECT' : 'NOT A DEFECT'}${e.type ? ' (' + e.type + ')' : ''}${e.note ? ' — ' + String(e.note).slice(0, 100) : ''}`).join('; ') + '. ' : ''
+    const refImgs = examples.map(e => e.b64)
     const verified = await mapLimit(candidates, conc, async (c) => {
       checkAbort()
       const x = clamp(c.x - win / 2, 0, Math.max(0, W - win)), y = clamp(c.y - win / 2, 0, Math.max(0, H - win))
       const abs = { x: Math.round(x), y: Math.round(y), w: Math.min(win, W), h: Math.min(win, H) }
       try {
         const b64 = await img.jpeg({ ...abs, resize: { w: 1000, h: Math.round(1000 * abs.h / abs.w) } })
-        const r = await spark(api, PROMPTS.verify, [b64], 'low')
+        const r = await spark(api, refText + PROMPTS.verify, [...refImgs, b64], 'low')   // the references ride along on the first look only
         acct(r.usage)
         let j = r.json || {}
         const norm = (o) => ['defect', 'lint', 'texture', 'unsure'].includes(o.verdict) ? o.verdict : (o.defect === true ? 'defect' : 'unsure')
@@ -292,7 +331,7 @@ export async function inspect(img, opts) {
       else if ((v.hits >= 2 && v.confidence >= 0.85) || v.confidence >= 0.9) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: 0.6, level: 'amber', severity: 'minor', why: 'شافوها بلاطتين (' + v.verdict + ') — ' + (v.vwhy || ''), window: v.window, hits: v.hits, unsure: true })
     }
     stageDone('verify', t)
-    return { tileResults, candidates, verified, findings }
+    return { tileResults, candidates, verified, findings, allTiles: allTiles.length, droppedOutside }
   }
 
   // ── branch G: 4) silhouette (no model call) → 5) parts/mirror → 6) global pass. Findings kept in that order.
@@ -388,7 +427,10 @@ export async function inspect(img, opts) {
   const [L, G] = await Promise.all([localBranch(), globalBranch()])
   timings.total = Date.now() - t0
 
-  return { width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...G.findings], parts: G.parts, usage, timings }
+  return {
+    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...G.findings], parts: G.parts, usage, timings,
+    framing, focus: focus ? { tiles: L.allTiles, sent: L.tileResults.length, skipped: L.allTiles - L.tileResults.length, droppedOutside: L.droppedOutside, painted: paint, marginPx: focus.margin * focus.cell } : null,
+  }
 }
 
 function fit(b, max) {

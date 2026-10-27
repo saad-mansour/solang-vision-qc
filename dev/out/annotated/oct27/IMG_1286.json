@@ -1,0 +1,241 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 293,
+  "y": 1999,
+  "w": 3716,
+  "h": 2588,
+  "concept": "sweatshirt",
+  "c": 0.949367105960846
+ },
+ "hasMask": true,
+ "tiles": 12,
+ "candidates": [
+  {
+   "x": 2379,
+   "y": 2149,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.75,
+   "why": "small dark loop sticking out at collar edge seam",
+   "hits": 2
+  },
+  {
+   "x": 2671,
+   "y": 2581,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.65,
+   "why": "faint darker discoloration spot on fabric",
+   "hits": 1
+  },
+  {
+   "x": 2696,
+   "y": 4095,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.8,
+   "why": "small dark speck on brown fabric above hem, not part of print",
+   "hits": 2
+  }
+ ],
+ "verified": [
+  {
+   "x": 2379,
+   "y": 2149,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.75,
+   "why": "small dark loop sticking out at collar edge seam",
+   "hits": 2,
+   "window": {
+    "x": 2129,
+    "y": 1899,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "loose_thread",
+   "vconfidence": 0.85,
+   "severity": "minor",
+   "vwhy": "Thin dark loose threads protrude from the neckline seam at center.",
+   "second": null
+  },
+  {
+   "x": 2671,
+   "y": 2581,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.65,
+   "why": "faint darker discoloration spot on fabric",
+   "hits": 1,
+   "window": {
+    "x": 2421,
+    "y": 2331,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "stain",
+   "vconfidence": 0.65,
+   "severity": "minor",
+   "vwhy": "Faint darker smudged discoloration at center differs from surrounding knit suggesting a light stain.",
+   "second": null
+  },
+  {
+   "x": 2696,
+   "y": 4095,
+   "type": "stain",
+   "types": [
+    "stain"
+   ],
+   "confidence": 0.8,
+   "why": "small dark speck on brown fabric above hem, not part of print",
+   "hits": 2,
+   "window": {
+    "x": 2446,
+    "y": 3845,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "defect",
+   "vtype": "hole",
+   "vconfidence": 0.8,
+   "severity": "minor",
+   "vwhy": "Small dark puncture disrupts the knit just above the seam.",
+   "second": null
+  }
+ ],
+ "findings": [
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "loose_thread",
+   "x": 2379,
+   "y": 2149,
+   "confidence": 0.85,
+   "level": "red",
+   "severity": "minor",
+   "why": "Thin dark loose threads protrude from the neckline seam at center.",
+   "window": {
+    "x": 2129,
+    "y": 1899,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 2
+  },
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "stain",
+   "x": 2671,
+   "y": 2581,
+   "confidence": 0.65,
+   "level": "amber",
+   "severity": "minor",
+   "why": "Faint darker smudged discoloration at center differs from surrounding knit suggesting a light stain.",
+   "window": {
+    "x": 2421,
+    "y": 2331,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 1
+  },
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "hole",
+   "x": 2696,
+   "y": 4095,
+   "confidence": 0.8,
+   "level": "red",
+   "severity": "minor",
+   "why": "Small dark puncture disrupts the knit just above the seam.",
+   "window": {
+    "x": 2446,
+    "y": 3845,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 2
+  }
+ ],
+ "parts": {
+  "part": "sleeve",
+  "measure": "sleeve",
+  "boxes": [
+   {
+    "x1": 428.4,
+    "y1": 2402.61,
+    "x2": 1210.23,
+    "y2": 3844.89,
+    "c": 0.9609756469726562
+   },
+   {
+    "x1": 2856,
+    "y1": 2334.7799999999997,
+    "x2": 3873.45,
+    "y2": 3484.32,
+    "c": 0.9649122953414917
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 7.1,
+   "reachDiffPct": 3.9,
+   "cx": 491
+  },
+  "lengthDiffPct": 3.9,
+  "mirror": {
+   "different": false,
+   "confidence": 0.92,
+   "differences": [],
+   "why": "Armhole seam curve, cuff attachment and body side construction mirror each other with only lay, lighting and crop variation.",
+   "votes": [
+    false,
+    false
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 37486,
+  "output_tokens": 9381,
+  "calls": 18,
+  "sam_calls": 2,
+  "examples": 0
+ },
+ "timings": {
+  "garment": 3223,
+  "tiles": 11400,
+  "verify": 4593,
+  "silhouette": 7,
+  "parts": 16106,
+  "global": 10547,
+  "total": 19348
+ },
+ "framing": {
+  "cut": [],
+  "small": false,
+  "areaPct": 39.3
+ },
+ "focus": {
+  "tiles": 12,
+  "sent": 12,
+  "skipped": 0,
+  "droppedOutside": 0,
+  "painted": true,
+  "marginPx": 128
+ }
+}

@@ -1,0 +1,210 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 814,
+  "y": 1167,
+  "w": 2785,
+  "h": 4227,
+  "concept": "pants",
+  "c": 0.96875
+ },
+ "hasMask": true,
+ "tiles": 15,
+ "candidates": [
+  {
+   "x": 2648,
+   "y": 3857,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.9,
+   "why": "small white wavy stray thread on black fabric",
+   "hits": 2
+  },
+  {
+   "x": 3312,
+   "y": 5013,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.9,
+   "why": "small white curved hanging thread on black fabric",
+   "hits": 2
+  }
+ ],
+ "verified": [
+  {
+   "x": 2648,
+   "y": 3857,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.9,
+   "why": "small white wavy stray thread on black fabric",
+   "hits": 2,
+   "window": {
+    "x": 2398,
+    "y": 3607,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "lint",
+   "vtype": "none",
+   "vconfidence": 0.95,
+   "severity": "minor",
+   "vwhy": "Thin white wavy fiber lies loosely on the black fabric surface with no seam attachment or weave damage.",
+   "second": {
+    "verdict": "lint",
+    "confidence": 0.95
+   }
+  },
+  {
+   "x": 3312,
+   "y": 5013,
+   "type": "loose_thread",
+   "types": [
+    "loose_thread"
+   ],
+   "confidence": 0.9,
+   "why": "small white curved hanging thread on black fabric",
+   "hits": 2,
+   "window": {
+    "x": 3062,
+    "y": 4763,
+    "w": 500,
+    "h": 500
+   },
+   "verdict": "lint",
+   "vtype": "none",
+   "vconfidence": 0.85,
+   "severity": "minor",
+   "vwhy": "Small white curved fiber lies on black fabric surface and is unattached to seam.",
+   "second": {
+    "verdict": "lint",
+    "confidence": 0.9
+   }
+  }
+ ],
+ "findings": [
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "loose_thread",
+   "x": 2648,
+   "y": 3857,
+   "confidence": 0.6,
+   "level": "amber",
+   "severity": "minor",
+   "why": "شافوها بلاطتين (lint) — Thin white wavy fiber lies loosely on the black fabric surface with no seam attachment or weave damage.",
+   "window": {
+    "x": 2398,
+    "y": 3607,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 2,
+   "unsure": true
+  },
+  {
+   "kind": "local",
+   "source": "tiles",
+   "type": "loose_thread",
+   "x": 3312,
+   "y": 5013,
+   "confidence": 0.6,
+   "level": "amber",
+   "severity": "minor",
+   "why": "شافوها بلاطتين (lint) — Small white curved fiber lies on black fabric surface and is unattached to seam.",
+   "window": {
+    "x": 3062,
+    "y": 4763,
+    "w": 500,
+    "h": 500
+   },
+   "hits": 2,
+   "unsure": true
+  },
+  {
+   "kind": "global",
+   "source": "mirror",
+   "type": "asymmetry",
+   "x": 2829,
+   "y": 3375,
+   "confidence": 0.85,
+   "level": "red",
+   "severity": "major",
+   "why": "mid-leg outer side transverse seam is straight and higher with acute intersection on left leg vs curved, lower and near-perpendicular intersection on right leg, giving different side panel shape"
+  }
+ ],
+ "parts": {
+  "part": "pant leg",
+  "measure": "leg",
+  "boxes": [
+   {
+    "x1": 913.92,
+    "y1": 1545.81,
+    "x2": 2195.55,
+    "y2": 5230.05,
+    "c": 0.8865247964859009
+   },
+   {
+    "x1": 2163.42,
+    "y1": 1513.68,
+    "x2": 3495.0299999999997,
+    "y2": 5237.19,
+    "c": 0.8787879347801208
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 0.4,
+   "reachDiffPct": 10.1,
+   "cx": 319
+  },
+  "lengthDiffPct": 0.4,
+  "mirror": {
+   "different": true,
+   "confidence": 0.85,
+   "differences": [
+    "mid-leg outer side transverse seam is straight and higher with acute intersection on left leg vs curved, lower and near-perpendicular intersection on right leg, giving different side panel shape"
+   ],
+   "why": "Mirror legs should have identical seam positions and panel shapes so this mismatch is rejectable.",
+   "votes": [
+    true,
+    true
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 42561,
+  "output_tokens": 10705,
+  "calls": 22,
+  "sam_calls": 2,
+  "examples": 0
+ },
+ "timings": {
+  "garment": 2078,
+  "tiles": 9577,
+  "verify": 7659,
+  "silhouette": 8,
+  "parts": 17059,
+  "global": 9335,
+  "total": 19321
+ },
+ "framing": {
+  "cut": [],
+  "small": false,
+  "areaPct": 48.1
+ },
+ "focus": {
+  "tiles": 15,
+  "sent": 15,
+  "skipped": 0,
+  "droppedOutside": 0,
+  "painted": true,
+  "marginPx": 128
+ }
+}

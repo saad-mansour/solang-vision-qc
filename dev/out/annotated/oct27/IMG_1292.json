@@ -1,0 +1,107 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 311,
+  "y": 2528,
+  "w": 3477,
+  "h": 1695,
+  "concept": "sweatshirt",
+  "c": 0.5508772134780884
+ },
+ "hasMask": true,
+ "tiles": 8,
+ "candidates": [],
+ "verified": [],
+ "findings": [
+  {
+   "kind": "global",
+   "source": "mirror",
+   "type": "asymmetry",
+   "x": 3129,
+   "y": 3074,
+   "confidence": 0.9,
+   "level": "red",
+   "severity": "major",
+   "why": "red bow print centered mid-sleeve in Image 1 but absent from center with motifs at cuff edge and shoulder edge in Image 2"
+  },
+  {
+   "kind": "global",
+   "source": "global",
+   "type": "print",
+   "x": 2328,
+   "y": 2994,
+   "confidence": 0.85,
+   "level": "red",
+   "severity": "major",
+   "why": "Central chest bow is misshapen and incomplete compared to all other uniform printed bows."
+  }
+ ],
+ "parts": {
+  "part": "sleeve",
+  "measure": "sleeve",
+  "boxes": [
+   {
+    "x1": 435.54,
+    "y1": 2748.9,
+    "x2": 1445.85,
+    "y2": 3377.22,
+    "c": 0.941605806350708
+   },
+   {
+    "x1": 2595.39,
+    "y1": 2759.61,
+    "x2": 3662.82,
+    "y2": 3291.54,
+    "c": 0.9336099624633789
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 0.6,
+   "reachDiffPct": 3.5,
+   "cx": 443
+  },
+  "lengthDiffPct": 0.6,
+  "mirror": {
+   "different": true,
+   "confidence": 0.9,
+   "differences": [
+    "red bow print centered mid-sleeve in Image 1 but absent from center with motifs at cuff edge and shoulder edge in Image 2"
+   ],
+   "why": "The mirrored right sleeve should show the same centered motif but the decoration is in a different position.",
+   "votes": [
+    true,
+    true
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 22349,
+  "output_tokens": 7037,
+  "calls": 11,
+  "sam_calls": 2,
+  "examples": 0
+ },
+ "timings": {
+  "garment": 2368,
+  "tiles": 11233,
+  "verify": 0,
+  "silhouette": 5,
+  "parts": 18451,
+  "global": 9482,
+  "total": 20832
+ },
+ "framing": {
+  "cut": [],
+  "small": false,
+  "areaPct": 24.1
+ },
+ "focus": {
+  "tiles": 8,
+  "sent": 8,
+  "skipped": 0,
+  "droppedOutside": 0,
+  "painted": true,
+  "marginPx": 128
+ }
+}

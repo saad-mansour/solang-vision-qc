@@ -1,9 +1,10 @@
 // Node harness: run the full pipeline on local photos with the Meta API directly (dev key from meta_key.txt — never committed)
-// usage: node run_pipeline.mjs <photo.jpg> [--garment sweatshirt] [--ref reference.jpg] [--out dir] [--conc 6]
+// usage: node run_pipeline.mjs <photo.jpg> [--garment sweatshirt] [--ref reference.jpg] [--out dir] [--conc 6] [--bg empty-table.jpg] [--no-focus] [--no-require]
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { inspect } from '../shared/pipeline.js'
+import { foregroundGrid } from '../shared/focus.js'
 const require = createRequire(import.meta.url)
 const sharp = require('./node/node_modules/sharp')
 const samParser = await import('./node/node_modules/@meta-sam/parser/dist/index.js')
@@ -21,10 +22,22 @@ async function adapter(file) {
   const m2 = await sharp(buf).metadata()
   return {
     width: m2.width, height: m2.height, buffer: buf,
-    async jpeg({ x, y, w, h, resize, mirror }) {
+    async jpeg({ x, y, w, h, resize, mirror, keep, fill }) {
       let s = sharp(buf).extract({ left: Math.round(x), top: Math.round(y), width: Math.round(w), height: Math.round(h) })
       if (resize) s = s.resize(Math.round(resize.w), Math.round(resize.h), { kernel: 'lanczos3' })
       if (mirror) s = s.flop()
+      if (typeof keep === 'function') {                                   // same contract as the browser adapter: pixels not kept → flat fill
+        const { data, info } = await s.raw().toBuffer({ resolveWithObject: true })
+        const f = Array.isArray(fill) ? fill : [128, 128, 128], sx = w / info.width, sy = h / info.height, ch = info.channels
+        for (let py = 0; py < info.height; py++) {
+          const Y = y + (py + 0.5) * sy
+          for (let px = 0; px < info.width; px++) {
+            const X = x + ((mirror ? info.width - 1 - px : px) + 0.5) * sx
+            if (!keep(X, Y)) { const i = (py * info.width + px) * ch; data[i] = f[0]; data[i + 1] = f[1]; data[i + 2] = f[2] }
+          }
+        }
+        return (await sharp(data, { raw: { width: info.width, height: info.height, channels: ch } }).jpeg({ quality: 90 }).toBuffer()).toString('base64')
+      }
       return (await s.jpeg({ quality: 90 }).toBuffer()).toString('base64')
     },
   }
@@ -35,8 +48,16 @@ if (!file) { console.error('usage: node run_pipeline.mjs <photo> [--garment x] [
 const outDir = arg('--out', './out/annotated'); fs.mkdirSync(outDir, { recursive: true })
 const img = await adapter(file)
 const ref = arg('--ref', null) ? await adapter(arg('--ref')) : null
+// --bg: a photo of the same table empty → foreground grid (only feeds the «clutter» warning)
+let fg = null
+if (arg('--bg', null)) {
+  const gray = async (f) => { const { data, info } = await sharp(f).rotate().resize(256).greyscale().raw().toBuffer({ resolveWithObject: true }); return { data: new Uint8Array(data.buffer, data.byteOffset, info.width * info.height), w: info.width, h: info.height } }
+  const [c, b] = await Promise.all([gray(file), gray(arg('--bg'))])
+  if (c.w === b.w && c.h === b.h) fg = foregroundGrid(c.data, b.data, c.w, c.h, { W: img.width, H: img.height })
+  else console.log('  ! --bg ignored: different frame size than the photo')
+}
 const t0 = Date.now()
-const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, concurrency: +arg('--conc', 6) || 6, onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
+const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, concurrency: +arg('--conc', 6) || 6, foreground: fg, focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
 const name = path.basename(file).replace(/\.[^.]+$/, '')
 fs.writeFileSync(path.join(outDir, name + '.json'), JSON.stringify(res, null, 1))
 // annotate: downscale to 1600 and draw circles (red ≥0.8, amber ≥0.5, blue = global/measurement)
@@ -52,7 +73,8 @@ await sharp(img.buffer).resize(ow, oh).composite([{ input: Buffer.from(svg), top
 const cost = (res.usage.input_tokens * 1.25 + res.usage.output_tokens * 4.25) / 1e6 + 0.0025 * res.usage.sam_calls
 console.log(`\n${name}: ${res.tiles} tiles · ${res.candidates.length} candidates → ${res.findings.length} findings · ${(Date.now() - t0) / 1000}s · tokens in ${res.usage.input_tokens} out ${res.usage.output_tokens} · ~$${cost.toFixed(3)}`)
 console.log('  timings:', ['garment', 'tiles', 'verify', 'parts', 'global', 'total'].map(k => `${k} ${((res.timings[k] || 0) / 1000).toFixed(1)}s`).join(' | '))   // stages overlap after garment; total = wall-clock
-console.log('  garment:', res.garmentBox ? `${res.garmentBox.concept} c=${res.garmentBox.c && res.garmentBox.c.toFixed(2)} box ${res.garmentBox.w}x${res.garmentBox.h} mask=${res.hasMask}` : 'not found (whole image)')
+console.log('  garment:', res.garmentBox ? `${res.garmentBox.concept} c=${res.garmentBox.c && res.garmentBox.c.toFixed(2)} box ${res.garmentBox.w}x${res.garmentBox.h} mask=${res.hasMask}` : (res.noGarment ? 'NOT FOUND — run stopped (noGarment)' : 'not found (whole image)'))
+console.log('  focus:', res.focus ? `${res.focus.sent}/${res.focus.tiles} tiles sent (${res.focus.skipped} table tiles skipped) · ${res.focus.droppedOutside} candidates outside the garment dropped · painted=${res.focus.painted} · margin ${res.focus.marginPx} px` : 'off (no mask)', '· framing:', JSON.stringify(res.framing))
 res.findings.forEach((f, i) => console.log(`  ${i + 1}. [${f.level}] ${f.source}/${f.type} ${Math.round(f.confidence * 100)}% at (${f.x},${f.y})${f.hits ? ' hits=' + f.hits : ''}${f.unsure ? ' (unsure)' : ''} — ${f.why}`))
-console.log('  parts:', JSON.stringify({ part: res.parts.part, silhouette: res.parts.silhouette, mirror: res.parts.mirror && { different: res.parts.mirror.different, c: res.parts.mirror.confidence, votes: res.parts.mirror.votes } }))
+if (res.parts) console.log('  parts:', JSON.stringify({ part: res.parts.part, silhouette: res.parts.silhouette, mirror: res.parts.mirror && { different: res.parts.mirror.different, c: res.parts.mirror.confidence, votes: res.parts.mirror.votes } }))
 console.log('  rejected:', res.verified.filter(v => ['lint', 'texture'].includes(v.verdict)).map(v => `${v.type}@(${v.x},${v.y}) ${v.verdict}${v.second ? '+' + v.second.verdict : ''}`).join(' | ') || 'none')

@@ -48,6 +48,12 @@
         <input type="file" id="fileInput" accept="image/*" hidden>
         <button type="button" id="btnFlip" class="btn">🔄 كاميرا</button>
       </div>
+      <!-- optional, once per station: a photo of the empty table, kept on this device — what differs from it is «not table» -->
+      <div class="row bgRow">
+        <button type="button" id="btnBg" class="btn small">🧹 صوّر الطاولة فاضية</button>
+        <span id="bgStatus"></span>
+        <button type="button" id="btnBgClear" class="btn small" hidden>🗑</button>
+      </div>
     </section>
 
     <!-- 3. inspection panel (photo + overlay) -->
@@ -77,6 +83,7 @@
         <span id="progressWarn" class="warn"></span>
         <button type="button" id="btnCancel" class="btn small">إلغاء</button>
       </div>
+      <div id="frameWarn" class="frameWarn" hidden></div>
       <div id="runError" class="err" hidden>
         <div class="errTitle">صار خطأ بالفحص</div>
         <pre id="runErrorText"></pre>

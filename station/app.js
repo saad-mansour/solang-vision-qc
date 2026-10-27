@@ -5,7 +5,8 @@
 import { inspect } from '../shared/pipeline.js'
 import * as samParser from './vendor/meta-sam-parser/index.js'
 import { makeApi, makeDb } from './api.js'
-import { fromBlob } from './browser-image.js'
+import { fromBlob, makeCanvas, canvasToBlob, blobToBase64, freeCanvas } from './browser-image.js'
+import { foregroundGrid } from '../shared/focus.js'
 import { openCamera, takePhoto, StillnessDetector, grayscaleSample } from './camera.js'
 import { openLink } from './link.js'
 import { makeSender, makeViewer } from './live.js'
@@ -45,6 +46,7 @@ const S = {
   reviewId: null, reviewDate: null, reviewBusy: false, reviewLocked: false, reviewTimer: null, lastPending: 0,   // ?mode=review
   link: null, linkUp: false, peer: null, peerSeen: 0, capReq: null, lastSavedId: null, linkTimer: null,              // phone ⇄ tablet link (link.js)
   live: null, liveBig: false, liveLostAt: 0, peerBoot: null, boot: Math.random().toString(36).slice(2),            // live view (live.js); boot = this page load's identity
+  noGarment: false, framing: null,                                                                                    // focus / framing of the current run
 }
 
 // ── tiny DOM helpers ─────────────────────────────────────────────────────────
@@ -94,7 +96,7 @@ async function init() {
     try { S.api = makeApi(S.cfg) } catch (e) { banner('ما قدرت جهّز الاتصال بالموديل: ' + msg(e)) }
     try { S.db = makeDb(S.cfg) } catch (e) { banner('ما قدرت جهّز الاتصال بالقاعدة: ' + msg(e)) }
   }
-  renderCards()
+  renderCards(); renderBgStatus()
   // DB loads run in parallel with the camera start; each failure is shown and the page stays usable
   if (S.db) {
     S.db.listOrders().then(renderOrders, (e) => banner('ما قدرت جيب الطلبيات: ' + msg(e)))
@@ -116,7 +118,9 @@ function wire() {
   $('btnShoot').addEventListener('click', () => captureFromCamera('يدوي'))
   $('btnFile').addEventListener('click', () => $('fileInput').click())
   $('fileInput').addEventListener('change', () => { const f = $('fileInput').files && $('fileInput').files[0]; $('fileInput').value = ''; if (f) runInspection(f, 'ملف') })
-  $('btnFlip').addEventListener('click', () => { S.facing = S.facing === 'environment' ? 'user' : 'environment'; startCamera() })
+  $('btnFlip').addEventListener('click', () => { S.facing = S.facing === 'environment' ? 'user' : 'environment'; startCamera(); renderBgStatus() })
+  $('btnBg').addEventListener('click', captureBackground)
+  $('btnBgClear').addEventListener('click', clearBackground)
   $('btnCancel').addEventListener('click', () => { if (S.controller) S.controller.abort() })
   $('overlay').addEventListener('click', onOverlayTap)
   $('btnPickerCancel').addEventListener('click', closePicker)
@@ -255,14 +259,17 @@ async function runInspection(blob, sourceLabel) {
     const img = await fromBlob(blob); S.img = img
     await showPhoto(await img.previewUrl(1600), img.width, img.height)
     if (!S.api) throw new Error('ما في إعدادات (config.js) — ما فيني كلّم الموديل')
+    // references for the verifier (fetched while SAM runs) and the empty-table comparison (local, no model call)
+    const examples = (S.db && order && order.model_code) ? loadExamples(order.model_code) : []
+    const foreground = await foregroundFor(img)
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal })
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, requireGarment: true })
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress('انلغى الفحص'); return }
-    S.res = res
+    S.res = res; S.noGarment = !!res.noGarment; S.framing = res.framing || null; showFraming(S.framing)
     S.findings = (res.findings || []).map((f) => ({ ...f, verdict: null, worker_name: null, stage: null, window: f.window || globalWindow(f, res) }))
     // model calls that failed (proxy limit, 401, offline…) must not read as «nothing suspicious»
     const failed = S.warns.filter((w) => ['garment', 'tile', 'parts', 'global'].includes(w.stage))
@@ -272,8 +279,13 @@ async function runInspection(blob, sourceLabel) {
       setProgress(`الفحص ما كمل — ${S.incomplete.tilesFailed}/${S.incomplete.tiles} بلاطة ما انفحصت`)
       $('runErrorText').textContent = `${S.incomplete.failed} طلب للموديل فشل — ما تعتمد على «ما لقيت شي»:\n` + [...new Set(failed.map((w) => `${w.stage}: ${w.error}`))].slice(0, 8).join('\n')
       $('runError').hidden = false
-    } else setProgress(S.findings.length ? `خلص — ${S.findings.length} نقطة للمراجعة` : 'خلص — ما لقيت شي مشبوه')
-    if (MODE === 'camera' && S.db) autoSave(img)          // camera device: hand the piece to the review screen right away
+    } else if (res.noGarment) setProgress('ما لقيت قطعة واضحة تحت الكاميرا — افردها بنص الكادر وجرّب')
+    else setProgress(S.findings.length ? `خلص — ${S.findings.length} نقطة للمراجعة` : 'خلص — ما لقيت شي مشبوه')
+    if (MODE === 'camera' && S.db && !res.noGarment) autoSave(img)     // camera device: hand the piece to the review screen right away
+    else if (MODE === 'camera' && res.noGarment) {                      // nothing to review: say so on the phone and go back to the camera
+      $('camLast').textContent = 'ما لقيت قطعة بالكادر — ما انبعت شي للمراجعة'; $('camLast').hidden = false
+      const mine = img; setTimeout(() => { if (S.img === mine && !S.running && !S.job) { resetInspection(); setView('camera'); renderCards() } }, CAMERA_NEXT_MS)
+    }
   } catch (e) {
     if (controller.signal.aborted) setProgress('انلغى الفحص')
     else { setProgress('وقف الفحص'); $('runErrorText').textContent = msg(e) + (e && e.stack && !String(e.stack).startsWith(msg(e)) ? '\n' + e.stack : ''); $('runError').hidden = false }
@@ -312,15 +324,17 @@ function onProgress(stage, info) {
   const two = () => setProgress(S.progL + (S.progG ? ' + ' + S.progG : ''))
   switch (stage) {
     case 'garment': S.progL = 'عم دوّر عالقطعة…'; S.progG = ''; two(); break
-    case 'tiles': S.progL = `عم فحص ${info.count} بلاطة…`; two(); break
+    case 'tiles': S.progL = `عم فحص ${info.count} بلاطة${info.skipped ? ' (تخطّى ' + info.skipped + ' برّا القطعة)' : ''}…`; two(); break
     case 'tile': S.tilesDone++; S.progL = `بلاطة ${S.tilesDone}/${info.n}`; two(); break          // tiles finish out of order → count completions
-    case 'verify': S.progL = info.count ? `عم أكد ${info.count} نقطة…` : 'ما في نقاط مشبوهة بالبلاطات'; two(); break
+    case 'verify': S.progL = info.count ? `عم أكد ${info.count} نقطة${info.examples ? ' مع ' + info.examples + ' أمثلة من المفتشة' : ''}…` : 'ما في نقاط مشبوهة بالبلاطات'; two(); break
     case 'parts': S.progG = 'عم قارن اليمين بالشمال…'; two(); break
     case 'global': S.progG = 'نظرة عامة…'; two(); break
     case 'stage_done':
       if (info.stage === 'verify') S.progL = 'النقاط المحلية خلصت ✓'
       if (info.stage === 'global') S.progG = ''
       two(); break
+    case 'framing': S.framing = info; showFraming(info); break
+    case 'nogarment': S.progL = 'ما لقيت قطعة واضحة بالصورة'; S.progG = ''; two(); break
     case 'warn': S.warns.push(info); $('progressWarn').textContent = `⚠ ${S.warns.length}`; $('progressWarn').title = S.warns.map((w) => `${w.stage}: ${w.error}`).join('\n'); break
   }
 }
@@ -332,7 +346,94 @@ function stopTimer() { clearInterval(S.timer); S.timer = null; tickTimer() }
 function showCost(res) {
   const u = res.usage || {}, t = res.timings || {}
   const usd = ((u.input_tokens || 0) * 1.25 + (u.output_tokens || 0) * 4.25) / 1e6 + 0.0025 * (u.sam_calls || 0)
-  $('costLine').textContent = `~$${usd.toFixed(3)} · ${((t.total || 0) / 1000).toFixed(1)} s · ${u.calls || 0} Spark · ${u.sam_calls || 0} SAM · ${res.tiles || 0} tiles · ${(u.input_tokens || 0)}/${(u.output_tokens || 0)} tok`
+  const focus = res.focus ? ` · ركّز عالقطعة: ${res.focus.sent}/${res.focus.tiles} بلاطة${res.focus.droppedOutside ? ' · شال ' + res.focus.droppedOutside + ' نقطة برّا القطعة' : ''}` : ''
+  const learn = u.examples ? ` · 🧠 ${u.examples} أمثلة من المفتشة` : ''
+  $('costLine').textContent = `~$${usd.toFixed(3)} · ${((t.total || 0) / 1000).toFixed(1)} s · ${u.calls || 0} Spark · ${u.sam_calls || 0} SAM · ${res.tiles || 0} tiles · ${(u.input_tokens || 0)}/${(u.output_tokens || 0)} tok${focus}${learn}`
+}
+
+// ── framing warnings (sent by the pipeline right after SAM, ~5 s into the run, and kept with the result) ─────────
+const SIDE_WORD = { top: 'فوق', bottom: 'تحت', left: 'شمال', right: 'يمين' }
+function framingText(f) {
+  if (!f) return ''
+  const parts = []
+  if (f.cut && f.cut.length) parts.push('القطعة طالعة برّا الكادر من ' + f.cut.map((s) => SIDE_WORD[s] || s).join(' و'))
+  if (f.small) parts.push('القطعة صغيرة بالصورة (' + f.areaPct + '٪) — قرّب الكاميرا')
+  if (f.clutter) parts.push('في شي غير القطعة عالطاولة (إيد / عصاية / غرض) — شيلو')
+  return parts.length ? '⚠ ' + parts.join(' · ') : ''
+}
+function showFraming(f) { const t = framingText(f); $('frameWarn').textContent = t; $('frameWarn').hidden = !t }
+
+// ── learning loop: the inspector's earlier verdicts on this product become references for the verifier ─────────
+// up to 3 «defect» + 3 «not a defect» crops, newest first, downscaled to 400 px; anything that fails to load just drops out
+async function loadExamples(modelCode) {
+  try {
+    const rows = (await S.db.examplesFor(modelCode, 30)) || []
+    const pick = (label) => rows.filter((r) => r.label === label && r.crop_path).slice(0, 3)
+    const out = await Promise.all([...pick('defect'), ...pick('not_defect')].map(async (r) => {
+      try { return { label: r.label, type: r.type, note: (r.note || '').slice(0, 100), b64: await urlToB64(S.db.publicUrl(r.crop_path), 400) } } catch (e) { return null }
+    }))
+    return out.filter(Boolean)
+  } catch (e) { return [] }
+}
+async function urlToB64(url, maxSide) {
+  const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status)
+  const bmp = await createImageBitmap(await r.blob())
+  try {
+    const s = Math.min(1, maxSide / Math.max(bmp.width, bmp.height))
+    const c = makeCanvas(Math.max(1, Math.round(bmp.width * s)), Math.max(1, Math.round(bmp.height * s)))
+    c.getContext('2d', { alpha: false }).drawImage(bmp, 0, 0, c.width, c.height)
+    try { return await blobToBase64(await canvasToBlob(c, 'image/jpeg', 0.85)) } finally { freeCanvas(c) }
+  } finally { bmp.close() }
+}
+
+// ── the empty table: one photo per station + camera facing, kept on this device as 256 px gray. What differs from it is «not table». ──
+const BG_W = 256
+const bgKey = () => `vqc_bg_${(S.cfg && S.cfg.STATION) || 'final-qc-1'}_${S.facing}`
+function loadBg() {
+  try {
+    const j = JSON.parse(lsGet(bgKey()) || 'null'); if (!j || !j.g || !j.w || !j.h) return null
+    const bin = atob(j.g), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i)
+    return a.length === j.w * j.h ? { w: j.w, h: j.h, gray: a, at: j.at } : null
+  } catch (e) { return null }
+}
+// bitmap → luma bytes at BG_W wide (same weights as the stillness sampler)
+function grayOf(bitmap) {
+  const w = BG_W, h = Math.max(1, Math.round(BG_W * bitmap.height / bitmap.width))
+  const c = makeCanvas(w, h), ctx = c.getContext('2d', { alpha: false, willReadFrequently: true })
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  const d = ctx.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h)
+  for (let i = 0, k = 0; k < g.length; i += 4, k++) g[k] = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
+  freeCanvas(c)
+  return { w, h, gray: g }
+}
+async function captureBackground() {
+  if (S.running || S.capturing) { toast('في فحص شغّال — استنّي يخلص'); return }
+  if (!S.cam) { toast('ما في كاميرا — ما فيني صوّر الطاولة'); return }
+  S.capturing = true
+  try {
+    const img = await fromBlob(await takePhoto(S.cam, $('video')))
+    try {
+      const g = grayOf(img.bitmap)
+      let bin = ''; for (let i = 0; i < g.gray.length; i += 0x8000) bin += String.fromCharCode.apply(null, g.gray.subarray(i, i + 0x8000))
+      lsSet(bgKey(), JSON.stringify({ w: g.w, h: g.h, g: btoa(bin), at: new Date().toISOString() }))
+    } finally { safeClose(img) }
+    toast('✓ انحفظت صورة الطاولة الفاضية — صار يعرف شو مش قطعة'); renderBgStatus()
+  } catch (e) { toast('ما قدرت صوّر الطاولة: ' + msg(e)) } finally { S.capturing = false }
+}
+function clearBackground() { try { localStorage.removeItem(bgKey()) } catch (e) { /* ignore */ } renderBgStatus(); toast('انمسحت صورة الطاولة الفاضية') }
+function renderBgStatus() {
+  const bg = loadBg(), s = $('bgStatus')
+  s.textContent = bg ? `الطاولة الفاضية محفوظة (${ymd(new Date(bg.at))} ${hhmm(bg.at)})` : 'اختياري: صوّر الطاولة وهي فاضية مرة، فبيعرف شو مش قطعة (إيد، عصاية، غرض)'
+  $('btnBgClear').hidden = !bg
+}
+// current photo vs the stored empty table → coarse foreground grid for the pipeline (null when none is stored or the frame size changed)
+async function foregroundFor(img) {
+  const bg = loadBg(); if (!bg) return null
+  try {
+    const g = grayOf(img.bitmap)
+    if (g.w !== bg.w || g.h !== bg.h) return null
+    return foregroundGrid(g.gray, bg.gray, g.w, g.h, { W: img.width, H: img.height })
+  } catch (e) { return null }
 }
 
 // ── overlay (circles) ────────────────────────────────────────────────────────
@@ -407,7 +508,7 @@ function renderCards() {
   if (S.view === 'camera') { box.appendChild(el('div', 'empty', 'حطّ القطعة تحت الكاميرا وشيل إيديك — أو اختار صورة من الجهاز')); return }
   if (S.view === 'history') return
   if (!S.findings.length) {
-    const t = S.running ? 'عم فحص…' : (MODE === 'review' && !S.reviewId) ? 'بانتظار قطعة من الكاميرا… أول ما تخلص بتطلع هون لحالها' : !(S.img || S.imgW) ? 'ما قدرت أفتح الصورة — افحص قطعة جديدة' : S.incomplete ? 'الفحص ما كمل — ما تعتمد على النتيجة، افحص القطعة من جديد' : S.res ? 'ما لقيت شي مشبوه 👍 — كبس عالصورة إذا شفت عيب' : 'ما في نتيجة — كبس عالصورة إذا شفت عيب، أو افحص قطعة جديدة'
+    const t = S.running ? 'عم فحص…' : S.noGarment ? 'ما لقيت قطعة واضحة بالصورة — افردها بنص الكادر وافحص من جديد' : (MODE === 'review' && !S.reviewId) ? 'بانتظار قطعة من الكاميرا… أول ما تخلص بتطلع هون لحالها' : !(S.img || S.imgW) ? 'ما قدرت أفتح الصورة — افحص قطعة جديدة' : S.incomplete ? 'الفحص ما كمل — ما تعتمد على النتيجة، افحص القطعة من جديد' : S.res ? 'ما لقيت شي مشبوه 👍 — كبس عالصورة إذا شفت عيب' : 'ما في نتيجة — كبس عالصورة إذا شفت عيب، أو افحص قطعة جديدة'
     box.appendChild(el('div', 'empty', t)); return
   }
   S.findings.forEach((f, i) => box.appendChild(buildCard(f, i)))
@@ -496,11 +597,12 @@ function setDecision(dec) {
 }
 function updateSaveEnabled() {
   const b = $('btnSave'), done = (S.job && S.job.done) || S.reviewLocked, busy = (S.job && S.job.busy) || S.reviewBusy
-  b.disabled = !S.decision || !(S.img || S.reviewId) || !S.db || !!done || !!busy
+  b.disabled = !S.decision || !(S.img || S.reviewId) || !S.db || !!done || !!busy || S.noGarment
   b.textContent = done ? '✓ انحفظ' : busy ? 'عم يحفظ…' : '💾 حفظ'
   b.classList.toggle('busy', !!busy)
   document.querySelectorAll('.btn.dec').forEach((d) => { d.disabled = !!S.job || S.reviewLocked })
   if (!S.db && S.img) $('saveStatus').textContent = 'ما في اتصال بالقاعدة (config.js) — الحفظ معطّل'
+  else if (S.noGarment && S.img) $('saveStatus').textContent = 'ما في قطعة بالصورة — ما في شي ينحفظ، افحص من جديد'
 }
 function saveStatus(t, cls) { const s = $('saveStatus'); s.textContent = t; s.className = 'status' + (cls ? ' ' + cls : '') }
 
@@ -668,7 +770,7 @@ function startLink() {
 function camState() { return S.running ? 'running' : (S.job && S.job.busy) ? 'uploading' : S.camStarting ? 'starting' : !S.cam ? 'nocam' : 'idle' }   // a file-input run on a camera-less device still reads «running»
 function sendState() {
   if (!S.link || !S.linkUp) return
-  if (MODE === 'camera') S.link.send('state', { role: 'camera', device: S.inspector || '', state: camState(), note: S.running ? $('progressText').textContent : '', lastId: S.lastSavedId, boot: S.boot, viewers: S.live ? S.live.viewers() : 0 })
+  if (MODE === 'camera') S.link.send('state', { role: 'camera', device: S.inspector || '', state: camState(), note: S.running ? [$('progressText').textContent, framingText(S.framing)].filter(Boolean).join(' · ') : '', lastId: S.lastSavedId, boot: S.boot, viewers: S.live ? S.live.viewers() : 0 })
   else if (MODE === 'review') S.link.send('state', { role: 'review', by: S.inspector || '' })
 }
 function onLinkMessage(event, p) {
@@ -779,10 +881,11 @@ async function reviewTick() {
   S.history = list
   if (changed) renderStrip()
   const pending = list.filter(isPending).sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-  if (pending.length > S.lastPending) notifyNew()
+  const waiting = !S.reviewId && !S.reviewOpening && S.view === 'inspect' && !S.img      // the «بانتظار قطعة» screen — never while the inspector browses an old piece
+  if (pending.length > S.lastPending) { notifyNew(); if (!waiting) toast('وصلت قطعة جديدة للمراجعة — «⬅ رجوع» لتفتحها', 4000) }
   S.lastPending = pending.length
-  if (!S.reviewId && !S.reviewOpening && pending.length) openReview(pending[0])
-  else if (!S.reviewId && !pending.length && S.view === 'inspect' && !S.img) setProgress(`بانتظار قطعة من الكاميرا… (${list.length} فحص محفوظ)`)
+  if (waiting && pending.length) openReview(pending[0])
+  else if (waiting && !pending.length) setProgress(`بانتظار قطعة من الكاميرا… (${list.length} فحص محفوظ)`)
 }
 
 function notifyNew() {
@@ -818,6 +921,7 @@ async function openReview(h) {
       S.img = await fromBlob(full); S.blob = full; await showPhoto(await S.img.previewUrl(1600), S.img.width, S.img.height)
     }
     S.res = { garmentBox: h.garment_box || null }; S.incomplete = h.incomplete || null      // the phone's failed model calls must not read as «clean» here either
+    S.framing = h.framing || null; showFraming(S.framing)
     S.findings = (rows || []).map((r) => ({ id: r.id, kind: r.kind, source: r.source, type: r.type, x: r.x, y: r.y, confidence: +r.confidence || 0, level: r.level, severity: r.severity, why: r.why || '', crop_path: r.crop_path, verdict: r.verdict || null, verdict_at: r.verdict_at || null, worker_name: r.worker_name || null, stage: r.stage || null, _workerId: r.worker_name ? String((S.workers.find((w) => w.name === r.worker_name) || {}).id || '') : '', unsure: /مش متأكد|شافوها بلاطتين/.test(r.why || '') }))
     S.decision = null
     renderAll(); renderStrip(); renderLive(); $('decisionBar').hidden = false; $('tapHint').hidden = !S.imgW
@@ -870,7 +974,7 @@ function resetInspection() {
   S.findings.forEach((f) => { if (f._cropUrl) { try { URL.revokeObjectURL(f._cropUrl) } catch (e) { /* ignore */ } f._cropUrl = null } })
   // a save that is still running or waiting for a retry stays alive (detached) and keeps its bitmap until it is done
   if (S.job && !S.job.done) { S.job.closeAfter = true; if (!S.detached.includes(S.job)) S.detached.push(S.job) } else safeClose(S.img)
-  S.img = null; S.blob = null; S.res = null; S.findings = []; S.decision = null; S.job = null; S.warns = []; S.incomplete = null
+  S.img = null; S.blob = null; S.res = null; S.findings = []; S.decision = null; S.job = null; S.warns = []; S.incomplete = null; S.noGarment = false; S.framing = null; $('frameWarn').hidden = true
   S.reviewId = null; S.reviewLocked = false; S.reviewPhotoUrl = null; S.imgW = 0; S.imgH = 0
   if (S.previewObjUrl) { try { URL.revokeObjectURL(S.previewObjUrl) } catch (e) { /* ignore */ } S.previewObjUrl = null }
   $('photo').removeAttribute('src'); clear($('overlay'))
@@ -923,7 +1027,7 @@ async function openHistory(h) {
   if (S.running) { toast('في فحص شغّال — استنّي يخلص'); return }
   if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm('المراجعة الحالية ما انحفظت — تتركها؟')) return
   if (S.img && S.view === 'inspect' && !S.job && !confirm('هالفحص ما انحفظ — تتركو؟')) return
-  resetInspection(); setView('history')
+  resetInspection(); setView('history'); $('btnBack').textContent = MODE === 'review' ? '⬅ رجوع للمراجعة' : '⬅ رجوع للكاميرا'
   const seq = ++S.histSeq                                        // a later tap on another thumbnail invalidates this one
   $('viewTitle').textContent = `فحص #${h.id} · ${h.order_number || ''} · ${SIDE_AR[h.side] || ''} · ${DEC_EMOJI[h.decision] || ''} ${DEC_AR[h.decision] || 'بلا قرار'} · ${h.inspector || ''} · ${hhmm(h.created_at)}`
   const p = h.annotated_path || h.photo_path

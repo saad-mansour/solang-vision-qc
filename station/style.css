@@ -63,6 +63,8 @@ main.grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px;
 .pill.same { background: #e5e7eb; }
 .msg { margin-top: 10px; padding: 10px 14px; background: #fff7ed; border: 2px solid var(--amber); border-radius: var(--radius); font-size: 15px; }
 .msg.ok { background: #f0fdf4; border-color: var(--green); font-weight: 700; }
+.bgRow { margin-top: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.frameWarn { margin-top: 8px; padding: 8px 12px; background: #fff7ed; border: 2px solid var(--amber); border-radius: var(--radius); font-weight: 700; }
 
 /* device modes: ?mode=camera (phone above the table) · ?mode=review (inspector's tablet) */
 /* two-device link bar (review tablet): the phone's state + the remote shutter */

@@ -1,0 +1,82 @@
+{
+ "width": 4284,
+ "height": 5712,
+ "garmentBox": {
+  "x": 1182,
+  "y": 2038,
+  "w": 2192,
+  "h": 3024,
+  "concept": "pants",
+  "c": 0.9452055096626282
+ },
+ "hasMask": true,
+ "tiles": 6,
+ "candidates": [],
+ "verified": [],
+ "findings": [],
+ "parts": {
+  "part": "pant leg",
+  "measure": "leg",
+  "boxes": [
+   {
+    "x1": 1263.78,
+    "y1": 2295.5099999999998,
+    "x2": 2152.71,
+    "y2": 4951.59,
+    "c": 0.9139785170555115
+   },
+   {
+    "x1": 2088.45,
+    "y1": 2249.1,
+    "x2": 3291.54,
+    "y2": 4794.51,
+    "c": 0.9179486632347107
+   }
+  ],
+  "silhouette": {
+   "lenDiffPct": 3.6,
+   "reachDiffPct": 19.1,
+   "cx": 254
+  },
+  "lengthDiffPct": 3.6,
+  "mirror": {
+   "different": false,
+   "confidence": 0.95,
+   "differences": [],
+   "why": "Both legs show identical ribbed panels with matching waistband and cuff seams and no pockets or decorations.",
+   "votes": [
+    false,
+    false
+   ]
+  }
+ },
+ "usage": {
+  "input_tokens": 18287,
+  "output_tokens": 4479,
+  "calls": 9,
+  "sam_calls": 2,
+  "examples": 0
+ },
+ "timings": {
+  "garment": 2402,
+  "tiles": 5901,
+  "verify": 0,
+  "silhouette": 8,
+  "parts": 9975,
+  "global": 4852,
+  "total": 12393
+ },
+ "framing": {
+  "cut": [],
+  "small": false,
+  "areaPct": 27.1
+ },
+ "focus": {
+  "tiles": 6,
+  "sent": 6,
+  "skipped": 0,
+  "droppedOutside": 0,
+  "painted": true,
+  "marginPx": 128
+ }
+}
