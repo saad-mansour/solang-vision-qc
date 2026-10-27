@@ -10,12 +10,14 @@ import { foregroundGrid } from '../shared/focus.js'
 import { openCamera, takePhoto, StillnessDetector, grayscaleSample } from './camera.js'
 import { openLink } from './link.js'
 import { makeSender, makeViewer } from './live.js'
+import { t, LANG, isEn, setLang, applyStatic, langChosen } from './i18n.js'
+import { showWelcome, welcomed } from './welcome.js'
 
-const TYPE_AR = { hole: 'خرم', snag: 'سحبة', stain: 'بقعة', loose_thread: 'خيط طالع', stitching: 'درزة', puckering: 'تكرمش', unfinished_edge: 'حافة مش مخلّصة', asymmetry: 'فرق بين الجهتين', length: 'طول مختلف', print: 'طباعة', missing_part: 'قطعة ناقصة', other: 'شي تاني' }
-const DEC_AR = { pass: 'سليمة', repair: 'تصليح', reject: 'مرفوضة' }
+const TYPE_AR = { hole: t('خرم'), snag: t('سحبة'), stain: t('بقعة'), loose_thread: t('خيط طالع'), stitching: t('درزة'), puckering: t('تكرمش'), unfinished_edge: t('حافة مش مخلّصة'), asymmetry: t('فرق بين الجهتين'), length: t('طول مختلف'), print: t('طباعة'), missing_part: t('قطعة ناقصة'), other: t('شي تاني') }
+const DEC_AR = { pass: t('سليمة'), repair: t('تصليح'), reject: t('مرفوضة') }
 const DEC_EMOJI = { pass: '✅', repair: '🔧', reject: '❌' }
-const SIDE_AR = { front: 'وجه', back: 'ضهر' }
-const PILL = { idle: 'جاهزة', moving: 'في حركة', settling: 'ثابتة…', still: '📸 لقطة!', cooldown: 'جاهزة', same: 'نفس القطعة' }
+const SIDE_AR = { front: t('وجه'), back: t('ضهر') }
+const PILL = { idle: t('جاهزة'), moving: t('في حركة'), settling: t('ثابتة…'), still: t('📸 لقطة!'), cooldown: t('جاهزة'), same: t('نفس القطعة') }
 const SAMPLE_W = 64, SAMPLE_H = 48           // detector sample size (matches StillnessDetector defaults)
 // Two-device setup: the phone above the table opens ?mode=camera (captures, inspects and saves automatically, decision left
 // open), the inspector's tablet opens ?mode=review (no camera; new inspections pop up for confirm/reject/decision).
@@ -56,7 +58,7 @@ const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls)
 const svgEl = (tag, attrs) => { const n = document.createElementNS(SVG_NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); return n }
 const clear = (n) => { while (n.firstChild) n.removeChild(n.firstChild) }
 const opt = (v, t) => { const o = el('option', null, t); o.value = v; return o }
-const msg = (e) => String((e && e.message) || e || 'خطأ غير معروف')
+const msg = (e) => String((e && e.message) || e || t('خطأ غير معروف'))
 const pad2 = (n) => String(n).padStart(2, '0')
 const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 const hhmm = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${pad2(d.getHours())}:${pad2(d.getMinutes())}` }
@@ -87,23 +89,26 @@ async function requestWakeLock() {
 
 // ── init ─────────────────────────────────────────────────────────────────────
 async function init() {
+  applyStatic()                                 // English UI when chosen (i18n.js); the Arabic source text is the key
   document.body.classList.add('mode-' + MODE)
   document.querySelectorAll('#modeNav a').forEach((a) => a.classList.toggle('active', a.dataset.mode === MODE))
-  if (MODE === 'camera') $('inspector').placeholder = 'اسم الجهاز (متل: كاميرا 1)'
+  if (MODE === 'camera') $('inspector').placeholder = t('اسم الجهاز (متل: كاميرا 1)')
   buildPicker(); wire()
   S.inspector = lsGet('vqc_inspector') || ''; $('inspector').value = S.inspector
-  try { S.cfg = (await import('./config.js')).default } catch (e) { banner('ملف الإعدادات station/config.js مش موجود — انسخ config.example.js وعبّيه') }
+  try { S.cfg = (await import('./config.js')).default } catch (e) { banner(t('ملف الإعدادات station/config.js مش موجود — انسخ config.example.js وعبّيه')) }
   if (S.cfg) {
-    try { S.api = makeApi(S.cfg) } catch (e) { banner('ما قدرت جهّز الاتصال بالموديل: ' + msg(e)) }
-    try { S.db = makeDb(S.cfg) } catch (e) { banner('ما قدرت جهّز الاتصال بالقاعدة: ' + msg(e)) }
+    try { S.api = makeApi(S.cfg) } catch (e) { banner(t('ما قدرت جهّز الاتصال بالموديل: ') + msg(e)) }
+    try { S.db = makeDb(S.cfg) } catch (e) { banner(t('ما قدرت جهّز الاتصال بالقاعدة: ') + msg(e)) }
   }
   renderCards(); renderBgStatus()
   // DB loads run in parallel with the camera start; each failure is shown and the page stays usable
   if (S.db) {
-    S.db.listOrders().then(renderOrders, (e) => banner('ما قدرت جيب الطلبيات: ' + msg(e)))
-    S.db.listWorkers().then((w) => { S.workers = w || [] }, (e) => banner('ما قدرت جيب العمال: ' + msg(e)))
+    S.db.listOrders().then(renderOrders, (e) => banner(t('ما قدرت جيب الطلبيات: ') + msg(e)))
+    S.db.listWorkers().then((w) => { S.workers = w || [] }, (e) => banner(t('ما قدرت جيب العمال: ') + msg(e)))
     refreshStats(); loadHistory()
   }
+  // first visit: pick a language, then a 3-step how-to — before the camera asks for permission (welcome.js); «?» reopens the how-to
+  if (!langChosen() || !welcomed() || PARAMS.has('welcome')) await showWelcome(langChosen() ? 'how' : 'lang')
   if (MODE === 'review') startReview(); else startCamera()
   $('linkBar').hidden = MODE !== 'review'
   if (MODE !== 'all' && S.cfg && S.cfg.SUPABASE_URL && S.cfg.SUPABASE_KEY) startLink()      // the two device modes talk over the Realtime link
@@ -116,9 +121,9 @@ function wire() {
   $('sideBack').addEventListener('click', () => setSide('back'))
   $('inspector').addEventListener('input', () => { S.inspector = $('inspector').value.trim(); lsSet('vqc_inspector', S.inspector) })
   $('autoCap').addEventListener('change', () => { S.autoCapture = $('autoCap').checked })
-  $('btnShoot').addEventListener('click', () => captureFromCamera('يدوي'))
+  $('btnShoot').addEventListener('click', () => captureFromCamera(t('يدوي')))
   $('btnFile').addEventListener('click', () => $('fileInput').click())
-  $('fileInput').addEventListener('change', () => { const f = $('fileInput').files && $('fileInput').files[0]; $('fileInput').value = ''; if (f) runInspection(f, 'ملف') })
+  $('fileInput').addEventListener('change', () => { const f = $('fileInput').files && $('fileInput').files[0]; $('fileInput').value = ''; if (f) runInspection(f, t('ملف')) })
   $('btnFlip').addEventListener('click', () => { S.facing = S.facing === 'environment' ? 'user' : 'environment'; startCamera(); renderBgStatus() })
   $('btnBg').addEventListener('click', captureBackground)
   $('btnBgClear').addEventListener('click', clearBackground)
@@ -131,6 +136,8 @@ function wire() {
   $('btnNew').addEventListener('click', newPiece)
   $('btnBack').addEventListener('click', newPiece)
   $('btnRemote').addEventListener('click', requestRemoteCapture)
+  $('btnLang').addEventListener('click', () => setLang(isEn() ? 'ar' : 'en'))
+  $('btnHelp').addEventListener('click', () => showWelcome('how'))
   // overlay alignment needs no JS on resize: the svg is positioned on the same box as the <img> (see style.css .photoWrap)
 }
 
@@ -138,7 +145,7 @@ function setSide(side) { S.side = side; $('sideFront').classList.toggle('active'
 
 function renderOrders(list) {
   S.orders = list || []; const sel = $('orderSel'); clear(sel)
-  if (!S.orders.length) { sel.appendChild(opt('', 'ما في طلبيات')); return }
+  if (!S.orders.length) { sel.appendChild(opt('', t('ما في طلبيات'))); return }
   S.orders.forEach((o, i) => sel.appendChild(opt(String(i), [o.order_number, o.product, o.color, o.line].filter(Boolean).join(' · '))))
   const last = lsGet('vqc_order'); const idx = Math.max(0, S.orders.findIndex((o) => o.order_number === last))
   sel.value = String(idx); S.order = S.orders[idx]
@@ -146,7 +153,7 @@ function renderOrders(list) {
 
 async function refreshStats() {
   if (!S.db) return
-  try { const s = await S.db.todayStats(); $('stats').textContent = `اليوم: ${s.inspections || 0} فحص · ${s.red || 0} أحمر · ${s.confirmed || 0} مؤكد` } catch (e) { $('stats').textContent = '' }
+  try { const s = await S.db.todayStats(); $('stats').textContent = t('اليوم: {n} فحص · {r} أحمر · {c} مؤكد', { n: s.inspections || 0, r: s.red || 0, c: s.confirmed || 0 }) } catch (e) { $('stats').textContent = '' }
 }
 
 // ── camera + stillness loop ──────────────────────────────────────────────────
@@ -168,7 +175,7 @@ async function startCamera() {
     if (!S.cam) {
       // desktop / no permission: hide the pill, keep the file button usable
       S.camStarting = false; $('pill').hidden = true; $('btnShoot').disabled = true; $('btnFlip').disabled = true
-      const m = $('camMsg'); m.textContent = 'الكاميرا ما اشتغلت على هالجهاز — استعمل «📁 صورة من الجهاز». (' + msg(e) + ')'; m.hidden = false
+      const m = $('camMsg'); m.textContent = t('الكاميرا ما اشتغلت على هالجهاز — استعمل «📁 صورة من الجهاز». ({err})', { err: msg(e) }); m.hidden = false
       return
     }
   }
@@ -177,7 +184,7 @@ async function startCamera() {
   S.cam.onLost = cameraLost
   if (S.live && MODE === 'camera') S.live.replaceTrack(S.cam.track)          // tablets already watching get the new camera
   S.det = new StillnessDetector()
-  S.det.onStill = () => { if (S.autoCapture && S.view === 'camera' && !S.running && !S.capturing) captureFromCamera('تلقائي') }
+  S.det.onStill = () => { if (S.autoCapture && S.view === 'camera' && !S.running && !S.capturing) captureFromCamera(t('تلقائي')) }
   S.sampleCanvas = S.sampleCanvas || document.createElement('canvas')
   setPill('idle')
   S.loop = setInterval(sampleTick, 125)        // ~8 fps is plenty for a hands-left-the-frame detector
@@ -198,8 +205,8 @@ function fakeCamera(video) {
 function cameraLost() {
   if (!S.cam) return
   stopCamera(); $('pill').hidden = true; $('btnShoot').disabled = true
-  const m = $('camMsg'); clear(m); m.appendChild(el('span', null, 'الكاميرا وقفت — '))
-  const b = el('button', 'btn small', '🔄 عيد تشغيل الكاميرا'); b.type = 'button'; b.addEventListener('click', startCamera); m.appendChild(b); m.hidden = false
+  const m = $('camMsg'); clear(m); m.appendChild(el('span', null, t('الكاميرا وقفت — ')))
+  const b = el('button', 'btn small', t('🔄 عيد تشغيل الكاميرا')); b.type = 'button'; b.addEventListener('click', startCamera); m.appendChild(b); m.hidden = false
 }
 
 function sampleTick() {
@@ -224,13 +231,13 @@ function setPill(state) {
 }
 
 async function captureFromCamera(label) {
-  if (S.running || S.capturing) { toast('في فحص شغّال — استنّي يخلص'); return }
-  if (!S.cam) { toast('ما في كاميرا — استعمل «صورة من الجهاز»'); return }
+  if (S.running || S.capturing) { toast(t('في فحص شغّال — استنّي يخلص')); return }
+  if (!S.cam) { toast(t('ما في كاميرا — استعمل «صورة من الجهاز»')); return }
   S.capturing = true
   try {
     const blob = await takePhoto(S.cam, $('video'))
     await runInspection(blob, label)
-  } catch (e) { toast('ما قدرت آخد الصورة: ' + msg(e)) } finally { S.capturing = false }
+  } catch (e) { toast(t('ما قدرت آخد الصورة: ') + msg(e)) } finally { S.capturing = false }
 }
 
 // ── inspection run ───────────────────────────────────────────────────────────
@@ -245,8 +252,8 @@ function setView(v) {
 }
 
 async function runInspection(blob, sourceLabel) {
-  if (S.running) { toast('في فحص شغّال — استنّي يخلص'); return }
-  if (!blob || !blob.size) { toast('الصورة فاضية'); return }
+  if (S.running) { toast(t('في فحص شغّال — استنّي يخلص')); return }
+  if (!blob || !blob.size) { toast(t('الصورة فاضية')); return }
   S.running = true
   resetInspection(); setView('inspect'); renderCards()           // placeholder «عم فحص…» while the run is in progress
   sendState()
@@ -255,21 +262,21 @@ async function runInspection(blob, sourceLabel) {
   const order = S.order
   S.warns = []; S.tilesDone = 0; S.progL = ''; S.progG = ''; $('progressWarn').textContent = ''; $('progressWarn').title = ''
   $('progress').hidden = false; $('btnCancel').hidden = false; $('runError').hidden = true; $('costLine').textContent = ''
-  setProgress('عم جهّز الصورة…'); startTimer()
+  setProgress(t('عم جهّز الصورة…')); startTimer()
   try {
     const img = await fromBlob(blob); S.img = img
     await showPhoto(await img.previewUrl(1600), img.width, img.height)
-    if (!S.api) throw new Error('ما في إعدادات (config.js) — ما فيني كلّم الموديل')
+    if (!S.api) throw new Error(t('ما في إعدادات (config.js) — ما فيني كلّم الموديل'))
     // references for the verifier (fetched while SAM runs) and the empty-table comparison (local, no model call)
     const examples = (S.db && order && order.model_code) ? loadExamples(order.model_code) : []
     const foreground = await foregroundFor(img)
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, requireGarment: true })
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, requireGarment: true, lang: LANG })
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
-    if (controller.signal.aborted) { setProgress('انلغى الفحص'); return }
+    if (controller.signal.aborted) { setProgress(t('انلغى الفحص')); return }
     S.res = res; S.framing = res.framing || null; showFraming(S.framing)
     S.findings = (res.findings || []).map((f) => ({ ...f, verdict: null, worker_name: null, stage: null, window: f.window || globalWindow(f, res) }))
     // model calls that failed (proxy limit, 401, offline…) must not read as «nothing suspicious»
@@ -278,19 +285,19 @@ async function runInspection(blob, sourceLabel) {
     S.noGarment = !!res.noGarment && !S.incomplete                 // a failed model call is never «no garment» (the pipeline goes on over the whole frame, flagged incomplete)
     renderAll(); showCost(res)
     if (S.incomplete) {
-      setProgress(`الفحص ما كمل — ${S.incomplete.tilesFailed}/${S.incomplete.tiles} بلاطة ما انفحصت`)
-      $('runErrorText').textContent = `${S.incomplete.failed} طلب للموديل فشل — ما تعتمد على «ما لقيت شي»:\n` + [...new Set(failed.map((w) => `${w.stage}: ${w.error}`))].slice(0, 8).join('\n')
+      setProgress(t('الفحص ما كمل — {f}/{n} بلاطة ما انفحصت', { f: S.incomplete.tilesFailed, n: S.incomplete.tiles }))
+      $('runErrorText').textContent = t('{n} طلب للموديل فشل — ما تعتمد على «ما لقيت شي»:', { n: S.incomplete.failed }) + '\n' + [...new Set(failed.map((w) => `${w.stage}: ${w.error}`))].slice(0, 8).join('\n')
       $('runError').hidden = false
-    } else if (S.noGarment) setProgress('ما لقيت قطعة واضحة تحت الكاميرا — افردها بنص الكادر وجرّب')
-    else setProgress(S.findings.length ? `خلص — ${S.findings.length} نقطة للمراجعة` : 'خلص — ما لقيت شي مشبوه')
+    } else if (S.noGarment) setProgress(t('ما لقيت قطعة واضحة تحت الكاميرا — افردها بنص الكادر وجرّب'))
+    else setProgress(S.findings.length ? t('خلص — {n} نقطة للمراجعة', { n: S.findings.length }) : t('خلص — ما لقيت شي مشبوه'))
     if (MODE === 'camera' && S.db && !S.noGarment) autoSave(img)       // camera device: hand the piece to the review screen right away (incomplete runs too, flagged)
     else if (MODE === 'camera' && S.noGarment) {                      // nothing to review: say so on the phone and go back to the camera
-      $('camLast').textContent = 'ما لقيت قطعة بالكادر — ما انبعت شي للمراجعة'; $('camLast').hidden = false
+      $('camLast').textContent = t('ما لقيت قطعة بالكادر — ما انبعت شي للمراجعة'); $('camLast').hidden = false
       const mine = img; setTimeout(() => { if (S.img === mine && !S.running && !S.job) { resetInspection(); setView('camera'); renderCards() } }, CAMERA_NEXT_MS)
     }
   } catch (e) {
-    if (controller.signal.aborted) setProgress('انلغى الفحص')
-    else { setProgress('وقف الفحص'); $('runErrorText').textContent = msg(e) + (e && e.stack && !String(e.stack).startsWith(msg(e)) ? '\n' + e.stack : ''); $('runError').hidden = false }
+    if (controller.signal.aborted) setProgress(t('انلغى الفحص'))
+    else { setProgress(t('وقف الفحص')); $('runErrorText').textContent = msg(e) + (e && e.stack && !String(e.stack).startsWith(msg(e)) ? '\n' + e.stack : ''); $('runError').hidden = false }
   } finally {
     stopTimer(); S.running = false; S.controller = null; $('btnCancel').hidden = true
     sendState()
@@ -325,45 +332,45 @@ function onProgress(stage, info) {
   if (!S.running || (S.controller && S.controller.signal.aborted)) return   // after a cancel the aborted calls are just noise
   const two = () => setProgress(S.progL + (S.progG ? ' + ' + S.progG : ''))
   switch (stage) {
-    case 'garment': S.progL = 'عم دوّر عالقطعة…'; S.progG = ''; two(); break
-    case 'tiles': S.progL = `عم فحص ${info.count} بلاطة${info.skipped ? ' (تخطّى ' + info.skipped + ' برّا القطعة)' : ''}…`; two(); break
-    case 'tile': S.tilesDone++; S.progL = `بلاطة ${S.tilesDone}/${info.n}`; two(); break          // tiles finish out of order → count completions
-    case 'verify': S.progL = info.count ? `عم أكد ${info.count} نقطة${info.examples ? ' مع ' + info.examples + ' أمثلة من المفتشة' : ''}…` : 'ما في نقاط مشبوهة بالبلاطات'; two(); break
-    case 'parts': S.progG = 'عم قارن اليمين بالشمال…'; two(); break
-    case 'global': S.progG = 'نظرة عامة…'; two(); break
+    case 'garment': S.progL = t('عم دوّر عالقطعة…'); S.progG = ''; two(); break
+    case 'tiles': S.progL = t('عم فحص {n} بلاطة{skipped}…', { n: info.count, skipped: info.skipped ? t(' (تخطّى {k} برّا القطعة)', { k: info.skipped }) : '' }); two(); break
+    case 'tile': S.tilesDone++; S.progL = t('بلاطة {i}/{n}', { i: S.tilesDone, n: info.n }); two(); break          // tiles finish out of order → count completions
+    case 'verify': S.progL = info.count ? t('عم أكد {n} نقطة{ex}…', { n: info.count, ex: info.examples ? t(' مع {k} أمثلة من المفتشة', { k: info.examples }) : '' }) : t('ما في نقاط مشبوهة بالبلاطات'); two(); break
+    case 'parts': S.progG = t('عم قارن اليمين بالشمال…'); two(); break
+    case 'global': S.progG = t('نظرة عامة…'); two(); break
     case 'stage_done':
-      if (info.stage === 'verify') S.progL = 'النقاط المحلية خلصت ✓'
+      if (info.stage === 'verify') S.progL = t('النقاط المحلية خلصت ✓')
       if (info.stage === 'global') S.progG = ''
       two(); break
     case 'framing': S.framing = info; showFraming(info); break
-    case 'nogarment': S.progL = 'ما لقيت قطعة واضحة بالصورة'; S.progG = ''; two(); break
+    case 'nogarment': S.progL = t('ما لقيت قطعة واضحة بالصورة'); S.progG = ''; two(); break
     case 'warn': S.warns.push(info); $('progressWarn').textContent = `⚠ ${S.warns.length}`; $('progressWarn').title = S.warns.map((w) => `${w.stage}: ${w.error}`).join('\n'); break
   }
 }
 function setProgress(t) { $('progressText').textContent = t }
 function startTimer() { S.runStarted = Date.now(); stopTimer(); S.timer = setInterval(tickTimer, 200); tickTimer() }
-function tickTimer() { $('progressTimer').textContent = ((Date.now() - S.runStarted) / 1000).toFixed(1) + ' ث' }
+function tickTimer() { $('progressTimer').textContent = ((Date.now() - S.runStarted) / 1000).toFixed(1) + t(' ث') }
 function stopTimer() { clearInterval(S.timer); S.timer = null; tickTimer() }
 
 function showCost(res) {
-  const u = res.usage || {}, t = res.timings || {}
+  const u = res.usage || {}, tm = res.timings || {}
   const usd = ((u.input_tokens || 0) * 1.25 + (u.output_tokens || 0) * 4.25) / 1e6 + 0.0025 * (u.sam_calls || 0)
-  const focus = res.focus ? ` · ركّز عالقطعة: ${res.focus.sent}/${res.focus.tiles} بلاطة${res.focus.droppedOutside ? ' · شال ' + res.focus.droppedOutside + ' نقطة برّا القطعة' : ''}` : ''
-  const learn = u.examples ? ` · 🧠 ${u.examples} أمثلة من المفتشة` : ''
-  $('costLine').textContent = `~$${usd.toFixed(3)} · ${((t.total || 0) / 1000).toFixed(1)} s · ${u.calls || 0} Spark · ${u.sam_calls || 0} SAM · ${res.tiles || 0} tiles · ${(u.input_tokens || 0)}/${(u.output_tokens || 0)} tok${focus}${learn}`
+  const focus = res.focus ? t(' · ركّز عالقطعة: {sent}/{tiles} بلاطة{dropped}', { sent: res.focus.sent, tiles: res.focus.tiles, dropped: res.focus.droppedOutside ? t(' · شال {k} نقطة برّا القطعة', { k: res.focus.droppedOutside }) : '' }) : ''
+  const learn = u.examples ? t(' · 🧠 {k} أمثلة من المفتشة', { k: u.examples }) : ''
+  $('costLine').textContent = `~$${usd.toFixed(3)} · ${((tm.total || 0) / 1000).toFixed(1)} s · ${u.calls || 0} Spark · ${u.sam_calls || 0} SAM · ${res.tiles || 0} tiles · ${(u.input_tokens || 0)}/${(u.output_tokens || 0)} tok${focus}${learn}`
 }
 
 // ── framing warnings (sent by the pipeline right after SAM, ~5 s into the run, and kept with the result) ─────────
-const SIDE_WORD = { top: 'فوق', bottom: 'تحت', left: 'شمال', right: 'يمين' }
+const SIDE_WORD = { top: t('فوق'), bottom: t('تحت'), left: t('شمال'), right: t('يمين') }
 function framingText(f) {
   if (!f) return ''
   const parts = []
-  if (f.cut && f.cut.length) parts.push('القطعة طالعة برّا الكادر من ' + f.cut.map((s) => SIDE_WORD[s] || s).join(' و'))
-  if (f.small) parts.push('القطعة صغيرة بالصورة (' + f.areaPct + '٪) — قرّب الكاميرا')
-  if (f.clutter) parts.push('في شي غير القطعة عالطاولة (إيد / عصاية / غرض) — شيلو')
+  if (f.cut && f.cut.length) parts.push(t('القطعة طالعة برّا الكادر من {sides}', { sides: f.cut.map((s) => SIDE_WORD[s] || s).join(t(' و')) }))
+  if (f.small) parts.push(t('القطعة صغيرة بالصورة ({p}٪) — قرّب الكاميرا', { p: f.areaPct }))
+  if (f.clutter) parts.push(t('في شي غير القطعة عالطاولة (إيد / عصاية / غرض) — شيلو'))
   return parts.length ? '⚠ ' + parts.join(' · ') : ''
 }
-function showFraming(f) { const t = framingText(f); $('frameWarn').textContent = t; $('frameWarn').hidden = !t }
+function showFraming(f) { const txt = framingText(f); $('frameWarn').textContent = txt; $('frameWarn').hidden = !txt }
 
 // ── learning loop: the inspector's earlier verdicts on this product become references for the verifier ─────────
 // up to 3 «defect» + 3 «not a defect» crops, newest first, downscaled to 400 px; anything that fails to load just drops out
@@ -409,8 +416,8 @@ function grayOf(bitmap) {
   return { w, h, gray: g }
 }
 async function captureBackground() {
-  if (S.running || S.capturing) { toast('في فحص شغّال — استنّي يخلص'); return }
-  if (!S.cam) { toast('ما في كاميرا — ما فيني صوّر الطاولة'); return }
+  if (S.running || S.capturing) { toast(t('في فحص شغّال — استنّي يخلص')); return }
+  if (!S.cam) { toast(t('ما في كاميرا — ما فيني صوّر الطاولة')); return }
   S.capturing = true
   try {
     const img = await fromBlob(await takePhoto(S.cam, $('video')))
@@ -418,15 +425,15 @@ async function captureBackground() {
       const g = grayOf(img.bitmap)
       let bin = ''; for (let i = 0; i < g.gray.length; i += 0x8000) bin += String.fromCharCode.apply(null, g.gray.subarray(i, i + 0x8000))
       lsSet(bgKey(), JSON.stringify({ w: g.w, h: g.h, g: btoa(bin), at: new Date().toISOString() }))
-      if (!loadBg()) throw new Error('التخزين المحلي رفض الحفظ')
+      if (!loadBg()) throw new Error(t('التخزين المحلي رفض الحفظ'))
     } finally { safeClose(img) }
-    toast('✓ انحفظت صورة الطاولة الفاضية — صار يعرف شو مش قطعة'); renderBgStatus()
-  } catch (e) { toast('ما قدرت صوّر الطاولة: ' + msg(e)) } finally { S.capturing = false }
+    toast(t('✓ انحفظت صورة الطاولة الفاضية — صار يعرف شو مش قطعة')); renderBgStatus()
+  } catch (e) { toast(t('ما قدرت صوّر الطاولة: ') + msg(e)) } finally { S.capturing = false }
 }
-function clearBackground() { try { localStorage.removeItem(bgKey()) } catch (e) { /* ignore */ } renderBgStatus(); toast('انمسحت صورة الطاولة الفاضية') }
+function clearBackground() { try { localStorage.removeItem(bgKey()) } catch (e) { /* ignore */ } renderBgStatus(); toast(t('انمسحت صورة الطاولة الفاضية')) }
 function renderBgStatus() {
   const bg = loadBg(), s = $('bgStatus')
-  s.textContent = bg ? `الطاولة الفاضية محفوظة (${ymd(new Date(bg.at))} ${hhmm(bg.at)})` : 'اختياري: صوّر الطاولة وهي فاضية مرة، فبيعرف شو مش قطعة (إيد، عصاية، غرض)'
+  s.textContent = bg ? t('الطاولة الفاضية محفوظة ({date} {time})', { date: ymd(new Date(bg.at)), time: hhmm(bg.at) }) : t('اختياري: صوّر الطاولة وهي فاضية مرة، فبيعرف شو مش قطعة (إيد، عصاية، غرض)')
   $('btnBgClear').hidden = !bg
 }
 // current photo vs the stored empty table → coarse foreground grid for the pipeline (null when none is stored or the frame size changed)
@@ -480,9 +487,9 @@ function focusCard(i) {
 // tap on the photo → type picker → added finding at that point (full-res coordinates via the svg's CTM)
 function onOverlayTap(ev) {
   if (S.view !== 'inspect' || !S.imgW) return
-  if (S.running) { toast('استنّي يخلص الفحص'); return }
-  if (S.job) { toast(S.job.done ? 'انحفظ هالفحص — افحص قطعة جديدة لتعدّل' : 'عم يحفظ — ما فيك تعدّل النقاط هلق'); return }
-  if (S.reviewLocked) { toast('انحفظت المراجعة — القطعة الجاية عم تنفتح'); return }
+  if (S.running) { toast(t('استنّي يخلص الفحص')); return }
+  if (S.job) { toast(S.job.done ? t('انحفظ هالفحص — افحص قطعة جديدة لتعدّل') : t('عم يحفظ — ما فيك تعدّل النقاط هلق')); return }
+  if (S.reviewLocked) { toast(t('انحفظت المراجعة — القطعة الجاية عم تنفتح')); return }
   if (S.pending) closePicker()                                  // a second tap while the picker is open just moves the mark
   const svg = $('overlay'); let pt
   const box = svg.getBoundingClientRect(); if (!box.width || !box.height) return
@@ -498,7 +505,7 @@ function buildPicker() { const grid = $('pickerGrid'); for (const k in TYPE_AR) 
 function closePicker() { $('picker').hidden = true; S.pending = null; const g = $('pendingMark'); if (g) g.remove() }
 function pickType(type) {
   const pt = S.pending; closePicker(); if (!pt || !S.imgW) return
-  S.findings.push({ kind: 'local', source: 'inspector', type, x: pt.x, y: pt.y, confidence: 1, level: 'red', severity: 'major', why: 'علّمتها المفتشة', verdict: 'added', verdict_at: new Date().toISOString(), worker_name: null, stage: null })
+  S.findings.push({ kind: 'local', source: 'inspector', type, x: pt.x, y: pt.y, confidence: 1, level: 'red', severity: 'major', why: t('علّمتها المفتشة'), verdict: 'added', verdict_at: new Date().toISOString(), worker_name: null, stage: null })
   renderAll(); focusCard(S.findings.length - 1)
 }
 
@@ -508,11 +515,11 @@ function renderAll() { renderOverlay(); renderCards(); updateSaveEnabled() }
 function renderCards() {
   const box = $('findings'); clear(box); box.classList.toggle('locked', !!S.job || S.reviewLocked || S.reviewBusy)   // frozen as soon as a save job exists (busy, failed or done)
   $('findingsCount').textContent = S.findings.length ? String(S.findings.length) : ''
-  if (S.view === 'camera') { box.appendChild(el('div', 'empty', 'حطّ القطعة تحت الكاميرا وشيل إيديك — أو اختار صورة من الجهاز')); return }
+  if (S.view === 'camera') { box.appendChild(el('div', 'empty', t('حطّ القطعة تحت الكاميرا وشيل إيديك — أو اختار صورة من الجهاز'))); return }
   if (S.view === 'history') return
   if (!S.findings.length) {
-    const t = S.running ? 'عم فحص…' : S.noGarment ? 'ما لقيت قطعة واضحة بالصورة — افردها بنص الكادر وافحص من جديد' : (MODE === 'review' && !S.reviewId) ? 'بانتظار قطعة من الكاميرا… أول ما تخلص بتطلع هون لحالها' : !(S.img || S.imgW) ? 'ما قدرت أفتح الصورة — افحص قطعة جديدة' : S.incomplete ? 'الفحص ما كمل — ما تعتمد على النتيجة، افحص القطعة من جديد' : S.res ? 'ما لقيت شي مشبوه 👍 — كبس عالصورة إذا شفت عيب' : 'ما في نتيجة — كبس عالصورة إذا شفت عيب، أو افحص قطعة جديدة'
-    box.appendChild(el('div', 'empty', t)); return
+    const txt = S.running ? t('عم فحص…') : S.noGarment ? t('ما لقيت قطعة واضحة بالصورة — افردها بنص الكادر وافحص من جديد') : (MODE === 'review' && !S.reviewId) ? t('بانتظار قطعة من الكاميرا… أول ما تخلص بتطلع هون لحالها') : !(S.img || S.imgW) ? t('ما قدرت أفتح الصورة — افحص قطعة جديدة') : S.incomplete ? t('الفحص ما كمل — ما تعتمد على النتيجة، افحص القطعة من جديد') : S.res ? t('ما لقيت شي مشبوه 👍 — كبس عالصورة إذا شفت عيب') : t('ما في نتيجة — كبس عالصورة إذا شفت عيب، أو افحص قطعة جديدة')
+    box.appendChild(el('div', 'empty', txt)); return
   }
   S.findings.forEach((f, i) => box.appendChild(buildCard(f, i)))
 }
@@ -520,11 +527,11 @@ function renderCards() {
 function cardHead(f, i) {
   const head = el('div', 'cardHead')
   head.appendChild(el('span', 'num', String(i + 1)))
-  head.appendChild(el('span', 'type', TYPE_AR[f.type] || f.type || 'شي تاني'))
+  head.appendChild(el('span', 'type', TYPE_AR[f.type] || f.type || t('شي تاني')))
   head.appendChild(el('span', 'conf', Math.round((+f.confidence || 0) * 100) + '%'))
-  if (f.kind === 'global') head.appendChild(el('span', 'tag', f.source === 'silhouette' ? 'قياس' : f.source === 'mirror' ? 'مقارنة' : 'عام'))
-  if (f.unsure) head.appendChild(el('span', 'tag unsure', 'مش متأكد'))
-  if (f.severity === 'major' && f.source !== 'inspector') head.appendChild(el('span', 'tag unsure', 'كبير'))
+  if (f.kind === 'global') head.appendChild(el('span', 'tag', f.source === 'silhouette' ? t('قياس') : f.source === 'mirror' ? t('مقارنة') : t('عام')))
+  if (f.unsure) head.appendChild(el('span', 'tag unsure', t('مش متأكد')))
+  if (f.severity === 'major' && f.source !== 'inspector') head.appendChild(el('span', 'tag unsure', t('كبير')))
   head.addEventListener('click', () => highlightMark(i))
   return head
 }
@@ -539,12 +546,12 @@ function buildCard(f, i) {
   card.appendChild(body)
   const foot = el('div', 'cardFoot')
   if (f.source === 'inspector') {
-    foot.appendChild(el('span', 'chip added', '➕ علّمتها المفتشة'))
-    const rm = el('button', 'btn', '✗ شيلها'); rm.type = 'button'
+    foot.appendChild(el('span', 'chip added', t('➕ علّمتها المفتشة')))
+    const rm = el('button', 'btn', t('✗ شيلها')); rm.type = 'button'
     rm.addEventListener('click', () => { S.findings.splice(i, 1); renderAll() }); foot.appendChild(rm)
   } else {
-    const yes = el('button', 'btn yes' + (f.verdict === 'confirmed' ? ' active' : ''), '✓ عيب'); yes.type = 'button'
-    const no = el('button', 'btn no' + (f.verdict === 'rejected' ? ' active' : ''), '✗ مش عيب'); no.type = 'button'
+    const yes = el('button', 'btn yes' + (f.verdict === 'confirmed' ? ' active' : ''), t('✓ عيب')); yes.type = 'button'
+    const no = el('button', 'btn no' + (f.verdict === 'rejected' ? ' active' : ''), t('✗ مش عيب')); no.type = 'button'
     yes.addEventListener('click', () => setVerdict(f, 'confirmed')); no.addEventListener('click', () => setVerdict(f, 'rejected'))
     foot.appendChild(yes); foot.appendChild(no)
   }
@@ -563,7 +570,7 @@ function setVerdict(f, v) {
 }
 
 function workerSelect(f) {
-  const sel = el('select', 'worker'); sel.appendChild(opt('', '— مين خيّطها؟ —'))
+  const sel = el('select', 'worker'); sel.appendChild(opt('', t('— مين خيّطها؟ —')))
   const line = S.order && S.order.line
   let ws = S.workers.filter((w) => !line || w.line === line); if (!ws.length) ws = S.workers
   ws.forEach((w) => sel.appendChild(opt(String(w.id), [w.name, w.stage].filter(Boolean).join(' · '))))
@@ -592,8 +599,8 @@ function cropUrl(f, img) {
 
 // ── decision + save ──────────────────────────────────────────────────────────
 function setDecision(dec) {
-  if (S.job) { toast(S.job.done ? 'انحفظ هالفحص — افحص قطعة جديدة' : 'عم يحفظ — القرار متثبّت'); return }
-  if (S.reviewLocked) { toast('انحفظت المراجعة — القطعة الجاية عم تنفتح'); return }
+  if (S.job) { toast(S.job.done ? t('انحفظ هالفحص — افحص قطعة جديدة') : t('عم يحفظ — القرار متثبّت')); return }
+  if (S.reviewLocked) { toast(t('انحفظت المراجعة — القطعة الجاية عم تنفتح')); return }
   S.decision = dec
   document.querySelectorAll('.btn.dec').forEach((b) => b.classList.toggle('active', b.dataset.dec === dec))
   updateSaveEnabled()
@@ -601,11 +608,11 @@ function setDecision(dec) {
 function updateSaveEnabled() {
   const b = $('btnSave'), done = (S.job && S.job.done) || S.reviewLocked, busy = (S.job && S.job.busy) || S.reviewBusy
   b.disabled = !S.decision || !(S.img || S.reviewId) || !S.db || !!done || !!busy || S.noGarment
-  b.textContent = done ? '✓ انحفظ' : busy ? 'عم يحفظ…' : '💾 حفظ'
+  b.textContent = done ? t('✓ انحفظ') : busy ? t('عم يحفظ…') : t('💾 حفظ')
   b.classList.toggle('busy', !!busy)
   document.querySelectorAll('.btn.dec').forEach((d) => { d.disabled = !!S.job || S.reviewLocked })
-  if (!S.db && S.img) $('saveStatus').textContent = 'ما في اتصال بالقاعدة (config.js) — الحفظ معطّل'
-  else if (S.noGarment && S.img) $('saveStatus').textContent = 'ما في قطعة بالصورة — ما في شي ينحفظ، افحص من جديد'
+  if (!S.db && S.img) $('saveStatus').textContent = t('ما في اتصال بالقاعدة (config.js) — الحفظ معطّل')
+  else if (S.noGarment && S.img) $('saveStatus').textContent = t('ما في قطعة بالصورة — ما في شي ينحفظ، افحص من جديد')
 }
 function saveStatus(t, cls) { const s = $('saveStatus'); s.textContent = t; s.className = 'status' + (cls ? ' ' + cls : '') }
 
@@ -635,31 +642,31 @@ async function runSave(job) {
   const db = S.db, n = job.findings.length
   const st = (t, cls) => { if (S.job === job) saveStatus(t, cls) }   // a job detached by «قطعة جديدة» never writes into the next inspection's status
   try {
-    if (!job.prep) { st('عم جهّز الصور…'); job.prep = await prepareBlobs(job) }
+    if (!job.prep) { st(t('عم جهّز الصور…')); job.prep = await prepareBlobs(job) }
     if (!job.id) {
-      st('عم سجّل الفحص…')
+      st(t('عم سجّل الفحص…'))
       const r0 = await db.insertInspection(inspectionRow(job)); const r = Array.isArray(r0) ? r0[0] : r0
-      if (!r || r.id == null) throw new Error('القاعدة ما رجّعت رقم الفحص')
+      if (!r || r.id == null) throw new Error(t('القاعدة ما رجّعت رقم الفحص'))
       job.id = r.id; job.date = ymd(r.created_at ? new Date(r.created_at) : new Date())
     }
     const base = `${job.date}/${job.id}/`
-    if (!job.paths.photo) { st('عم رفع الصورة…'); await db.uploadPhoto(base + 'photo.jpg', job.prep.photo); job.paths.photo = base + 'photo.jpg' }
-    if (!job.paths.preview && job.prep.preview) { st('عم رفع المعاينة…'); await db.uploadPhoto(base + 'preview.jpg', job.prep.preview); job.paths.preview = base + 'preview.jpg' }
-    if (!job.paths.annotated && job.prep.annotated) { st('عم رفع الصورة المعلّمة…'); await db.uploadPhoto(base + 'annotated.jpg', job.prep.annotated); job.paths.annotated = base + 'annotated.jpg' }
+    if (!job.paths.photo) { st(t('عم رفع الصورة…')); await db.uploadPhoto(base + 'photo.jpg', job.prep.photo); job.paths.photo = base + 'photo.jpg' }
+    if (!job.paths.preview && job.prep.preview) { st(t('عم رفع المعاينة…')); await db.uploadPhoto(base + 'preview.jpg', job.prep.preview); job.paths.preview = base + 'preview.jpg' }
+    if (!job.paths.annotated && job.prep.annotated) { st(t('عم رفع الصورة المعلّمة…')); await db.uploadPhoto(base + 'annotated.jpg', job.prep.annotated); job.paths.annotated = base + 'annotated.jpg' }
     for (let i = 0; i < n; i++) {
       const f = job.findings[i]
       if (f._cropPath || !job.prep.crops[i]) continue
-      st(`عم رفع القصّات ${i + 1}/${n}…`)
+      st(t('عم رفع القصّات {i}/{n}…', { i: i + 1, n }))
       const p = base + `crop-${i + 1}.jpg`; await db.uploadPhoto(p, job.prep.crops[i]); f._cropPath = p
     }
     if (!job.findingIds) {
-      st('عم سجّل النقاط…')
+      st(t('عم سجّل النقاط…'))
       const rows = job.findings.map((f) => findingRow(job, f))
       const ins = rows.length ? await db.insertFindings(rows) : []
       job.findingIds = (Array.isArray(ins) ? ins : []).map((r) => r.id)
     }
     if (!job.examples) {
-      st('عم سجّل الأمثلة…')
+      st(t('عم سجّل الأمثلة…'))
       const ex = []
       job.findings.forEach((f, i) => {
         if (!f.verdict || !f._cropPath) return                  // vision_examples.crop_path is NOT NULL
@@ -670,20 +677,20 @@ async function runSave(job) {
     }
     // released to the review screen LAST: photo_path set = photo, preview, crops and finding rows are all in place (the tablet polls and opens only such rows)
     if (!job.patched) { await db.updateInspection(job.id, { photo_path: job.paths.photo, annotated_path: job.paths.annotated || null, decision: job.decision }); job.patched = true }
-    job.done = true; st(job.auto ? '✓ انبعتت للمراجعة' : '✓ انحفظ', 'ok')
+    job.done = true; st(job.auto ? t('✓ انبعتت للمراجعة') : t('✓ انحفظ'), 'ok')
     if (job.auto) { S.lastSavedId = job.id; if (S.link) S.link.send('saved', { id: job.id }) }   // the tablet polls right away
     S.detached = S.detached.filter((j) => j !== job)
-    if (S.job === job) { renderCards(); updateSaveEnabled() } else toast(`✓ انحفظ فحص القطعة السابقة${job.id ? ' (#' + job.id + ')' : ''}`)
+    if (S.job === job) { renderCards(); updateSaveEnabled() } else toast(t('✓ انحفظ فحص القطعة السابقة{id}', { id: job.id ? ' (#' + job.id + ')' : '' }))
     refreshStats(); loadHistory()
     if (job.auto) {                                            // camera device: show the result briefly, then wait for the next piece
       const nf = job.findings.length, nr = job.findings.filter((f) => f.level === 'red').length
-      $('camLast').textContent = `آخر قطعة #${job.id}: ${nf ? nf + ' نقطة' + (nr ? ' (' + nr + ' أحمر)' : '') : 'ما في نقاط'} — انبعتت للمراجعة`; $('camLast').hidden = false
+      $('camLast').textContent = t('آخر قطعة #{id}: {what} — انبعتت للمراجعة', { id: job.id, what: nf ? t('{n} نقطة', { n: nf }) + (nr ? t(' ({r} أحمر)', { r: nr }) : '') : t('ما في نقاط') }); $('camLast').hidden = false
       if (S.job === job) setTimeout(() => { if (S.job === job && !S.running) newPiece() }, CAMERA_NEXT_MS)
     }
   } catch (e) {
-    st('ما انحفظ: ' + msg(e), 'bad')
-    if (S.job === job) { $('btnRetry').hidden = false; if (job.auto) $('camLast').textContent = 'آخر قطعة ما انبعتت: ' + msg(e) }
-    else banner(`فحص القطعة السابقة${job.id ? ' (#' + job.id + ')' : ''} ما خلص حفظو: ${msg(e)}`, '🔁 حاول مرة تانية', () => runSave(job))
+    st(t('ما انحفظ: ') + msg(e), 'bad')
+    if (S.job === job) { $('btnRetry').hidden = false; if (job.auto) $('camLast').textContent = t('آخر قطعة ما انبعتت: ') + msg(e) }
+    else banner(t('فحص القطعة السابقة{id} ما خلص حفظو: {err}', { id: job.id ? ' (#' + job.id + ')' : '', err: msg(e) }), t('🔁 حاول مرة تانية'), () => runSave(job))
   } finally {
     job.busy = false; sendState()
     if (S.job === job) updateSaveEnabled()
@@ -767,10 +774,10 @@ async function linkSig(req) {
 }
 async function linkOk(p) { if (!linkCode()) return true; return !!(p && p.req && p.sig) && (await linkSig(p.req)) === p.sig }
 function setLinkCode() {
-  const v = prompt('رمز الربط بين الموبايل والتابلت (نفسو عالجهازين؛ فاضي = بلا رمز):', linkCode())
+  const v = prompt(t('رمز الربط بين الموبايل والتابلت (نفسو عالجهازين؛ فاضي = بلا رمز):'), linkCode())
   if (v == null) return
   if (v.trim()) lsSet('vqc_link_code', v.trim()); else { try { localStorage.removeItem('vqc_link_code') } catch (e) { /* ignore */ } }
-  toast(v.trim() ? '🔑 انحفظ رمز الربط' : 'انشال رمز الربط'); renderLink()
+  toast(v.trim() ? t('🔑 انحفظ رمز الربط') : t('انشال رمز الربط')); renderLink()
 }
 
 function startLink() {
@@ -784,7 +791,7 @@ function startLink() {
     $('liveWrap').addEventListener('click', () => { S.liveBig = !S.liveBig; renderLive() })
     document.addEventListener('visibilitychange', maintainLive)
   } else S.live = makeSender({ send, getStream: () => S.cam && S.cam.stream, onState: () => renderLink() })
-  $('linkText').title = $('camLink').title = 'كبسة: رمز الربط بين الجهازين'
+  $('linkText').title = $('camLink').title = t('كبسة: رمز الربط بين الجهازين')
   $('linkText').addEventListener('click', setLinkCode); $('camLink').addEventListener('click', setLinkCode)
   S.linkTimer = setInterval(() => { sendState(); renderLink(); maintainLive() }, LINK_STATE_MS)
   renderLink()
@@ -793,7 +800,7 @@ function camState() { return (S.running || S.capturing) ? 'running' : (S.job && 
 function sendState() {
   if (!S.link || !S.linkUp) return
   if (MODE === 'camera') S.link.send('state', { role: 'camera', device: S.inspector || '', state: camState(), note: S.running ? [$('progressText').textContent, framingText(S.framing)].filter(Boolean).join(' · ') : '', lastId: S.lastSavedId, boot: S.boot, viewers: S.live ? S.live.viewers() : 0,
-    err: S.incomplete ? 'الفحص ما كمل عالموبايل — ' + String((S.warns[0] && S.warns[0].error) || '').slice(0, 80) : S.noGarment ? 'ما لقيت قطعة بالكادر' : '', code: !!linkCode() })
+    err: S.incomplete ? t('الفحص ما كمل عالموبايل — ') + String((S.warns[0] && S.warns[0].error) || '').slice(0, 80) : S.noGarment ? t('ما لقيت قطعة بالكادر') : '', code: !!linkCode() })
   else if (MODE === 'review') S.link.send('state', { role: 'review', by: S.inspector || '' })
 }
 function onLinkMessage(event, p) {
@@ -810,7 +817,7 @@ function onLinkMessage(event, p) {
   if (MODE !== 'review') return
   if (event === 'ack' && S.capReq && p.req === S.capReq.req) {
     clearTimeout(S.capReq.timer); S.capReq = null
-    toast(p.ok ? '📷 الموبايل عم يصوّر…' : 'الموبايل ما صوّر: ' + (p.reason || '')); renderLink()
+    toast(p.ok ? t('📷 الموبايل عم يصوّر…') : t('الموبايل ما صوّر: ') + (p.reason || '')); renderLink()
   } else if (event === 'saved') reviewTick()
 }
 // the tablet asked for a shot: answer at once, revive the camera if it had stopped, leave the previous piece (its upload goes on detached), shoot
@@ -818,27 +825,27 @@ async function remoteCapture(p) {
   const reply = (ok, reason) => { if (S.link) S.link.send('ack', { req: p.req, ok, reason: reason || null }) }
   if (!p || !p.req || S.seenReq.has(p.req)) return                                       // replayed or malformed: ignored
   S.seenReq.add(p.req); if (S.seenReq.size > 300) S.seenReq.delete(S.seenReq.values().next().value)
-  if (!(await linkOk(p))) { reply(false, 'رمز الربط مش مطابق — كبسي على سطر الحالة لتكتبيه'); return }
-  if (Date.now() - S.lastRemoteShot < REMOTE_MIN_MS) { reply(false, 'استنّي كم ثانية بين لقطة ولقطة'); return }
-  if (S.running || S.capturing) { reply(false, 'في فحص شغّال — استنّي يخلص'); return }
+  if (!(await linkOk(p))) { reply(false, t('رمز الربط مش مطابق — كبسي على سطر الحالة لتكتبيه')); return }
+  if (Date.now() - S.lastRemoteShot < REMOTE_MIN_MS) { reply(false, t('استنّي كم ثانية بين لقطة ولقطة')); return }
+  if (S.running || S.capturing) { reply(false, t('في فحص شغّال — استنّي يخلص')); return }
   if (!S.cam && !S.camStarting) await startCamera()
   for (let i = 0; i < 25 && S.camStarting; i++) await new Promise((r) => setTimeout(r, 200))   // a camera that is just (re)starting gets up to 5 s
-  if (!S.cam) { reply(false, 'الكاميرا مش شغّالة عالموبايل'); return }
+  if (!S.cam) { reply(false, t('الكاميرا مش شغّالة عالموبايل')); return }
   if (S.view !== 'camera') { resetInspection(); setView('camera'); renderCards() }
   reply(true); sendState(); S.lastRemoteShot = Date.now()
-  setTimeout(() => captureFromCamera('من شاشة المراجعة'), 350)      // let the live view paint a frame after the panel switch
+  setTimeout(() => captureFromCamera(t('من شاشة المراجعة')), 350)      // let the live view paint a frame after the panel switch
 }
 async function requestRemoteCapture() {
   if (!S.link || !S.linkUp || S.capReq) return
   const req = Math.random().toString(36).slice(2) + Date.now().toString(36)
-  if (!S.link.send('capture', { req, by: S.inspector || '', sig: await linkSig(req) })) { toast('ما في اتصال بالموبايل'); return }
-  S.capReq = { req, timer: setTimeout(() => { if (S.capReq && S.capReq.req === req) { S.capReq = null; toast('الموبايل ما ردّ — تأكدي إنو صفحة الكاميرا مفتوحة عليه'); renderLink() } }, ACK_WAIT_MS) }
+  if (!S.link.send('capture', { req, by: S.inspector || '', sig: await linkSig(req) })) { toast(t('ما في اتصال بالموبايل')); return }
+  S.capReq = { req, timer: setTimeout(() => { if (S.capReq && S.capReq.req === req) { S.capReq = null; toast(t('الموبايل ما ردّ — تأكدي إنو صفحة الكاميرا مفتوحة عليه')); renderLink() } }, ACK_WAIT_MS) }
   renderLink()
 }
 // WebRTC signaling rides on the link (live.js): the tablet asks, the phone offers, the tablet answers
 function onRtc(event, p) {
   if (!S.live || !p) return
-  if (MODE === 'camera') { if (event === 'rtc-want') linkOk(p).then((ok) => ok ? S.live.makeOffer(p.req) : S.link.send('rtc-fail', { req: p.req, reason: 'رمز الربط مش مطابق' })); else if (event === 'rtc-answer') S.live.onAnswer(p.req, p.sdp); else if (event === 'rtc-ice') S.live.onIce(p.req, p.cand) }
+  if (MODE === 'camera') { if (event === 'rtc-want') linkOk(p).then((ok) => ok ? S.live.makeOffer(p.req) : S.link.send('rtc-fail', { req: p.req, reason: t('رمز الربط مش مطابق') })); else if (event === 'rtc-answer') S.live.onAnswer(p.req, p.sdp); else if (event === 'rtc-ice') S.live.onIce(p.req, p.cand) }
   else if (MODE === 'review') { if (event === 'rtc-offer') S.live.onOffer(p.req, p.sdp); else if (event === 'rtc-ice') S.live.onIce(p.req, p.cand); else if (event === 'rtc-fail') S.live.onFail(p.req, p.reason) }
 }
 // the tablet keeps a live view while the phone has a working camera and this page is visible; drops it otherwise
@@ -863,30 +870,30 @@ function renderLive() {
   const show = live || S.live.connecting() || !!reason
   w.hidden = !show; if (!show) return
   w.classList.toggle('live', live); w.classList.toggle('small', !!S.reviewId && !S.liveBig)
-  $('liveCap').textContent = live ? '📡 مباشر من الموبايل' + (S.reviewId && !S.liveBig ? ' — كبسي للتكبير' : '') : reason ? '📡 ' + reason : '📡 عم وصل بث الكاميرا…'
+  $('liveCap').textContent = live ? t('📡 مباشر من الموبايل') + (S.reviewId && !S.liveBig ? t(' — كبسي للتكبير') : '') : reason ? '📡 ' + reason : t('📡 عم وصل بث الكاميرا…')
 }
 // status line on both devices; on the tablet also the «📸» button (enabled only when the phone can shoot now)
 function renderLink() {
   const alive = !!S.peer && Date.now() - S.peerSeen < PEER_TTL_MS
   if (MODE === 'camera') {
     const m = $('camLink'); if (!S.link) { m.hidden = true; return }
-    m.textContent = (!S.linkUp ? '🔌 عم وصل بشاشة المراجعة…' : alive ? `🧐 شاشة المراجعة متصلة${S.peer.by ? ' (' + S.peer.by + ')' : ''} — فيها تطلب الفحص من عندها` : '🧐 شاشة المراجعة مش مفتوحة — افتح ?mode=review عالتابلت') + (S.live && S.live.viewers() ? ' · 📡 البث شغّال' : '') + (linkCode() ? ' 🔑' : '')
+    m.textContent = (!S.linkUp ? t('🔌 عم وصل بشاشة المراجعة…') : alive ? t('🧐 شاشة المراجعة متصلة{by} — فيها تطلب الفحص من عندها', { by: S.peer.by ? ' (' + S.peer.by + ')' : '' }) : t('🧐 شاشة المراجعة مش مفتوحة — افتح ?mode=review عالتابلت')) + (S.live && S.live.viewers() ? t(' · 📡 البث شغّال') : '') + (linkCode() ? ' 🔑' : '')
     m.className = 'msg' + (alive ? ' ok' : ''); m.hidden = false; return
   }
   if (MODE !== 'review') return
   const dev = alive && S.peer.device ? ' (' + S.peer.device + ')' : '', st = alive ? S.peer.state : null
-  let t, cls = 'off', on = false
-  if (!S.link) t = 'ما في اتصال بالموبايل (config.js)'
-  else if (!S.linkUp) t = '🔌 عم وصل…'
-  else if (!alive) t = '📷 الموبايل مش متصل — افتحي رابط الكاميرا عليه'
-  else if (S.capReq) { t = '📨 بعتت للموبايل…'; cls = 'busy' }
-  else if (st === 'running') { t = `⏳ الموبايل عم يفحص${dev}${S.peer.note ? ' — ' + S.peer.note : ''}`; cls = 'busy' }
-  else if (st === 'starting') { t = `📷 الموبايل عم يشغّل الكاميرا${dev}…`; cls = 'busy' }
-  else if (st === 'uploading') { t = `⏫ الموبايل عم يرفع القطعة السابقة${dev} — فيكي تصوّري التالية`; cls = 'ok'; on = true }
-  else if (st === 'nocam') { t = `📷 الموبايل متصل${dev} بس كاميرتو واقفة — الكبسة بتجرّب تشغيلها`; cls = 'busy'; on = true }
-  else { t = `📷 الموبايل جاهز${dev} — حطّي القطعة واكبسي` + (S.peer.err ? ' · ⚠ آخر فحص: ' + S.peer.err : ''); cls = S.peer.err ? 'busy' : 'ok'; on = true }
-  if (linkCode()) t += ' 🔑'; else if (alive && S.peer.code) t += ' · الموبايل بدو رمز ربط — كبسي هون لتكتبيه'
-  $('linkText').textContent = t; $('linkBar').className = 'linkBar ' + cls; $('btnRemote').disabled = !on
+  let txt, cls = 'off', on = false
+  if (!S.link) txt = t('ما في اتصال بالموبايل (config.js)')
+  else if (!S.linkUp) txt = t('🔌 عم وصل…')
+  else if (!alive) txt = t('📷 الموبايل مش متصل — افتحي رابط الكاميرا عليه')
+  else if (S.capReq) { txt = t('📨 بعتت للموبايل…'); cls = 'busy' }
+  else if (st === 'running') { txt = t('⏳ الموبايل عم يفحص{dev}{note}', { dev, note: S.peer.note ? ' — ' + S.peer.note : '' }); cls = 'busy' }
+  else if (st === 'starting') { txt = t('📷 الموبايل عم يشغّل الكاميرا{dev}…', { dev }); cls = 'busy' }
+  else if (st === 'uploading') { txt = t('⏫ الموبايل عم يرفع القطعة السابقة{dev} — فيكي تصوّري التالية', { dev }); cls = 'ok'; on = true }
+  else if (st === 'nocam') { txt = t('📷 الموبايل متصل{dev} بس كاميرتو واقفة — الكبسة بتجرّب تشغيلها', { dev }); cls = 'busy'; on = true }
+  else { txt = t('📷 الموبايل جاهز{dev} — حطّي القطعة واكبسي', { dev }) + (S.peer.err ? t(' · ⚠ آخر فحص: ') + S.peer.err : ''); cls = S.peer.err ? 'busy' : 'ok'; on = true }
+  if (linkCode()) txt += ' 🔑'; else if (alive && S.peer.code) txt += t(' · الموبايل بدو رمز ربط — كبسي هون لتكتبيه')
+  $('linkText').textContent = txt; $('linkBar').className = 'linkBar ' + cls; $('btnRemote').disabled = !on
 }
 
 // ── ?mode=review: the inspector's screen ─────────────────────────────────────
@@ -896,9 +903,9 @@ const isPending = (h) => !h.decision && !!h.photo_path
 const isUploading = (h) => !h.decision && !h.photo_path
 function startReview() {
   setView('inspect'); $('cameraPanel').hidden = true; $('tapHint').hidden = true
-  $('progress').hidden = false; setProgress('بانتظار قطعة من الكاميرا…'); $('btnCancel').hidden = true
+  $('progress').hidden = false; setProgress(t('بانتظار قطعة من الكاميرا…')); $('btnCancel').hidden = true
   renderCards()
-  if (!S.db) { banner('وضع المراجعة بدو اتصال بالقاعدة (config.js)'); return }
+  if (!S.db) { banner(t('وضع المراجعة بدو اتصال بالقاعدة (config.js)')); return }
   S.reviewTimer = setInterval(reviewTick, REVIEW_POLL_MS); reviewTick()
 }
 
@@ -911,10 +918,10 @@ async function reviewTick() {
   if (changed) renderStrip()
   const pending = list.filter(isPending).sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   const waiting = !S.reviewId && !S.reviewOpening && S.view === 'inspect' && !S.img      // the «بانتظار قطعة» screen — never while the inspector browses an old piece
-  if (pending.length > S.lastPending) { notifyNew(); if (!waiting) toast(S.view === 'history' ? 'وصلت قطعة جديدة للمراجعة — «⬅ رجوع» لتفتحها' : 'وصلت قطعة جديدة — بتنفتح بعد ما تخلّصي هالقطعة', 4000) }
+  if (pending.length > S.lastPending) { notifyNew(); if (!waiting) toast(S.view === 'history' ? t('وصلت قطعة جديدة للمراجعة — «⬅ رجوع» لتفتحها') : t('وصلت قطعة جديدة — بتنفتح بعد ما تخلّصي هالقطعة'), 4000) }
   S.lastPending = pending.length
   if (waiting && pending.length) openReview(pending[0])
-  else if (waiting && !pending.length) setProgress(`بانتظار قطعة من الكاميرا… (${list.length} فحص محفوظ)`)
+  else if (waiting && !pending.length) setProgress(t('بانتظار قطعة من الكاميرا… ({n} فحص محفوظ)', { n: list.length }))
 }
 
 function notifyNew() {
@@ -934,7 +941,7 @@ async function openReview(h) {
     if (S.order) { $('orderSel').value = String(S.orders.indexOf(S.order)) }
     setSide(h.side === 'back' ? 'back' : 'front')
     $('progress').hidden = false; $('btnCancel').hidden = true
-    setProgress(`قطعة #${h.id} · ${h.order_number || ''} — عم نزّل الصورة…`); startTimer()
+    setProgress(t('قطعة #{id} · {order} — عم نزّل الصورة…', { id: h.id, order: h.order_number || '' })); startTimer()
     // the light 1600 px preview is enough to look and decide; the full photo is fetched only if the inspector adds a spot (crop)
     S.reviewPhotoUrl = h.photo_path ? S.db.publicUrl(h.photo_path) : null
     const previewUrl = h.photo_path ? S.db.publicUrl(h.photo_path.replace(/photo\.jpg$/, 'preview.jpg')) : null
@@ -945,31 +952,31 @@ async function openReview(h) {
     if (S.reviewId !== h.id) return                           // the reviewer moved on
     if (blob) { S.previewObjUrl = URL.createObjectURL(blob); await showPhoto(S.previewObjUrl, h.width, h.height) }
     else if (S.reviewPhotoUrl) {                              // older inspections without preview.jpg: full photo
-      const fr = await fetch(S.reviewPhotoUrl); if (!fr.ok) throw new Error('الصورة مش موجودة بالمخزن (' + fr.status + ')')
+      const fr = await fetch(S.reviewPhotoUrl); if (!fr.ok) throw new Error(t('الصورة مش موجودة بالمخزن ({status})', { status: fr.status }))
       const full = await fr.blob(); if (S.reviewId !== h.id) return
       S.img = await fromBlob(full); S.blob = full; await showPhoto(await S.img.previewUrl(1600), S.img.width, S.img.height)
     }
     S.res = { garmentBox: h.garment_box || null }; S.incomplete = h.incomplete || null      // the phone's failed model calls must not read as «clean» here either
     S.framing = h.framing || null; showFraming(S.framing)
-    S.findings = (rows || []).map((r) => ({ id: r.id, kind: r.kind, source: r.source, type: r.type, x: r.x, y: r.y, confidence: +r.confidence || 0, level: r.level, severity: r.severity, why: r.why || '', crop_path: r.crop_path, verdict: r.verdict || null, verdict_at: r.verdict_at || null, worker_name: r.worker_name || null, stage: r.stage || null, _workerId: r.worker_name ? String((S.workers.find((w) => w.name === r.worker_name) || {}).id || '') : '', unsure: /مش متأكد|شافوها بلاطتين/.test(r.why || '') }))
+    S.findings = (rows || []).map((r) => ({ id: r.id, kind: r.kind, source: r.source, type: r.type, x: r.x, y: r.y, confidence: +r.confidence || 0, level: r.level, severity: r.severity, why: r.why || '', crop_path: r.crop_path, verdict: r.verdict || null, verdict_at: r.verdict_at || null, worker_name: r.worker_name || null, stage: r.stage || null, _workerId: r.worker_name ? String((S.workers.find((w) => w.name === r.worker_name) || {}).id || '') : '', unsure: /مش متأكد|شافوها بلاطتين|^Not sure|two tiles/.test(r.why || '') }))
     S.decision = null
     renderAll(); renderStrip(); renderLive(); $('decisionBar').hidden = false; $('tapHint').hidden = !S.imgW
-    stopTimer(); setProgress(`قطعة #${h.id} · ${h.order_number || ''} · ${hhmm(h.created_at)} — ${S.incomplete ? '⚠ الفحص ما كمل عالموبايل — ما تعتمدي على «ما لقت شي»' : S.findings.length ? S.findings.length + ' نقطة للمراجعة' : 'الكاميرا ما لقت شي — قرّري'}`)
+    stopTimer(); setProgress(t('قطعة #{id} · {order} · {time} — {what}', { id: h.id, order: h.order_number || '', time: hhmm(h.created_at), what: S.incomplete ? t('⚠ الفحص ما كمل عالموبايل — ما تعتمدي على «ما لقت شي»') : S.findings.length ? t('{n} نقطة للمراجعة', { n: S.findings.length }) : t('الكاميرا ما لقت شي — قرّري') }))
   } catch (e) {
-    stopTimer(); setProgress('ما قدرت أفتح القطعة: ' + msg(e)); S.reviewId = null
+    stopTimer(); setProgress(t('ما قدرت أفتح القطعة: ') + msg(e)); S.reviewId = null
   } finally { S.reviewOpening = false }
 }
 
 // writes the reviewer's verdicts / worker / decision on the rows the camera device created; new tapped spots get a crop + a row
 async function saveReview() {
   if (!S.reviewId || S.reviewBusy || !S.decision || !S.db) return
-  S.reviewBusy = true; updateSaveEnabled(); renderCards(); saveStatus('عم يحفظ المراجعة…')
+  S.reviewBusy = true; updateSaveEnabled(); renderCards(); saveStatus(t('عم يحفظ المراجعة…'))
   const db = S.db, by = S.inspector || null, now = new Date().toISOString(), id = S.reviewId, base = `${S.reviewDate}/${id}/`
   try {
     let k = S.findings.filter((f) => f.id).length
     const added = S.findings.filter((f) => !f.id)
     if (added.length && !S.img && S.reviewPhotoUrl) {           // crops need the full photo: fetch it once, only now
-      saveStatus('عم نزّل الصورة الكاملة للقصّات…')
+      saveStatus(t('عم نزّل الصورة الكاملة للقصّات…'))
       try { const full = await (await fetch(S.reviewPhotoUrl)).blob(); S.img = await fromBlob(full) } catch (e) { /* no crop then */ }
     }
     for (const f of added) {                                     // spots the inspector added on this screen
@@ -989,11 +996,11 @@ async function saveReview() {
     await db.updateInspection(id, { decision: S.decision, inspector: by })
     const ex = S.findings.filter((f) => f.verdict && f.crop_path && f.id && changed.has(f.id)).map((f) => ({ finding_id: f.id, model_code: S.order ? S.order.model_code : null, type: f.type || 'other', label: f.verdict === 'rejected' ? 'not_defect' : 'defect', crop_path: f.crop_path, note: f.why || null }))
     if (ex.length) await db.insertExamples(ex)
-    S.reviewLocked = true; saveStatus('✓ انحفظت المراجعة — القطعة الجاية عم تنفتح', 'ok'); renderCards(); updateSaveEnabled()
+    S.reviewLocked = true; saveStatus(t('✓ انحفظت المراجعة — القطعة الجاية عم تنفتح'), 'ok'); renderCards(); updateSaveEnabled()
     refreshStats()
-    setTimeout(() => { if (S.reviewId === id && S.reviewLocked) { S.reviewId = null; resetInspection(); renderCards(); setProgress('بانتظار قطعة من الكاميرا…'); $('progress').hidden = false; renderLive(); reviewTick() } }, 2500)
+    setTimeout(() => { if (S.reviewId === id && S.reviewLocked) { S.reviewId = null; resetInspection(); renderCards(); setProgress(t('بانتظار قطعة من الكاميرا…')); $('progress').hidden = false; renderLive(); reviewTick() } }, 2500)
   } catch (e) {
-    saveStatus('ما انحفظت المراجعة: ' + msg(e), 'bad'); $('btnRetry').hidden = false
+    saveStatus(t('ما انحفظت المراجعة: ') + msg(e), 'bad'); $('btnRetry').hidden = false
   } finally { S.reviewBusy = false; updateSaveEnabled(); if (!S.reviewLocked) renderCards() }
 }
 
@@ -1012,12 +1019,12 @@ function resetInspection() {
   $('findings').classList.remove('locked'); updateSaveEnabled()
 }
 function newPiece() {
-  if (S.running) { toast('في فحص شغّال — استنّي يخلص أو ألغيه'); return }
+  if (S.running) { toast(t('في فحص شغّال — استنّي يخلص أو ألغيه')); return }
   if (MODE === 'review') {                                     // «قطعة جديدة» on the review screen = skip to the next pending piece
-    if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm('المراجعة ما انحفظت — تتركها؟')) return
-    resetInspection(); setView('inspect'); $('cameraPanel').hidden = true; renderCards(); $('progress').hidden = false; setProgress('بانتظار قطعة من الكاميرا…'); renderLive(); reviewTick(); return
+    if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm(t('المراجعة ما انحفظت — تتركها؟'))) return
+    resetInspection(); setView('inspect'); $('cameraPanel').hidden = true; renderCards(); $('progress').hidden = false; setProgress(t('بانتظار قطعة من الكاميرا…')); renderLive(); reviewTick(); return
   }
-  if (S.img && S.view === 'inspect' && !S.job && !S.noGarment && !confirm('هالفحص ما انحفظ — تتركو؟')) return
+  if (S.img && S.view === 'inspect' && !S.job && !S.noGarment && !confirm(t('هالفحص ما انحفظ — تتركو؟'))) return
   resetInspection(); setView('camera'); renderCards()
   // no detector reset here: it remembers the last captured scene, so the same garment is not re-shot and a swapped one
   // (even one already lying still) is seen as a motion burst when sampling resumes
@@ -1026,12 +1033,12 @@ function newPiece() {
 // ── history strip + read-only view ───────────────────────────────────────────
 async function loadHistory() {
   if (!S.db) return
-  try { S.history = (await S.db.recentInspections(12)) || [] } catch (e) { banner('ما قدرت جيب آخر الفحوصات: ' + msg(e)); return }
+  try { S.history = (await S.db.recentInspections(12)) || [] } catch (e) { banner(t('ما قدرت جيب آخر الفحوصات: ') + msg(e)); return }
   renderStrip()
 }
 function renderStrip() {
   const strip = $('historyStrip'); clear(strip)
-  if (!S.history.length) { strip.appendChild(el('div', 'empty', 'بعد ما في فحوصات')); return }
+  if (!S.history.length) { strip.appendChild(el('div', 'empty', t('بعد ما في فحوصات'))); return }
   S.history.forEach((h) => {
     const pending = isPending(h), uploading = isUploading(h)
     const b = el('button', 'hist' + (pending ? ' pending' : '') + (uploading ? ' uploading' : '') + (S.reviewId === h.id ? ' current' : '')); b.type = 'button'
@@ -1041,38 +1048,38 @@ function renderStrip() {
     b.appendChild(im)
     b.appendChild(el('span', 'hdec', uploading ? '⏫' : pending ? '⏳' : (DEC_EMOJI[h.decision] || '·')))
     b.appendChild(el('span', 'hord', h.order_number || h.model_code || ''))
-    b.appendChild(el('span', 'htime', uploading ? 'عم توصل من الكاميرا…' : pending ? 'بانتظار المراجعة' : `${hhmm(h.created_at)} · ${SIDE_AR[h.side] || ''}`))
-    b.addEventListener('click', () => uploading ? toast('لسا عم توصل من الكاميرا — ثواني') : (pending && MODE === 'review') ? switchReview(h) : openHistory(h))
+    b.appendChild(el('span', 'htime', uploading ? t('عم توصل من الكاميرا…') : pending ? t('بانتظار المراجعة') : `${hhmm(h.created_at)} · ${SIDE_AR[h.side] || ''}`))
+    b.addEventListener('click', () => uploading ? toast(t('لسا عم توصل من الكاميرا — ثواني')) : (pending && MODE === 'review') ? switchReview(h) : openHistory(h))
     strip.appendChild(b)
   })
 }
 function switchReview(h) {
   if (S.reviewId === h.id) return
-  if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm('المراجعة الحالية ما انحفظت — تتركها؟')) return
+  if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm(t('المراجعة الحالية ما انحفظت — تتركها؟'))) return
   openReview(h)
 }
 
 async function openHistory(h) {
-  if (S.running) { toast('في فحص شغّال — استنّي يخلص'); return }
-  if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm('المراجعة الحالية ما انحفظت — تتركها؟')) return
-  if (S.img && S.view === 'inspect' && !S.job && !confirm('هالفحص ما انحفظ — تتركو؟')) return
-  resetInspection(); setView('history'); $('btnBack').textContent = MODE === 'review' ? '⬅ رجوع للمراجعة' : '⬅ رجوع للكاميرا'
+  if (S.running) { toast(t('في فحص شغّال — استنّي يخلص')); return }
+  if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm(t('المراجعة الحالية ما انحفظت — تتركها؟'))) return
+  if (S.img && S.view === 'inspect' && !S.job && !confirm(t('هالفحص ما انحفظ — تتركو؟'))) return
+  resetInspection(); setView('history'); $('btnBack').textContent = MODE === 'review' ? t('⬅ رجوع للمراجعة') : t('⬅ رجوع للكاميرا')
   const seq = ++S.histSeq                                        // a later tap on another thumbnail invalidates this one
-  $('viewTitle').textContent = `فحص #${h.id} · ${h.order_number || ''} · ${SIDE_AR[h.side] || ''} · ${DEC_EMOJI[h.decision] || ''} ${DEC_AR[h.decision] || 'بلا قرار'} · ${h.inspector || ''} · ${hhmm(h.created_at)}`
+  $('viewTitle').textContent = t('فحص #{id} · {order} · {side} · {dec} · {by} · {time}', { id: h.id, order: h.order_number || '', side: SIDE_AR[h.side] || '', dec: (DEC_EMOJI[h.decision] || '') + ' ' + (DEC_AR[h.decision] || t('بلا قرار')), by: h.inspector || '', time: hhmm(h.created_at) })
   const p = h.annotated_path || h.photo_path
   clear($('overlay')); $('photo').src = p ? S.db.publicUrl(p) : ''
-  const box = $('findings'); clear(box); $('findingsCount').textContent = ''; box.appendChild(el('div', 'empty', 'عم جيب النقاط…'))
+  const box = $('findings'); clear(box); $('findingsCount').textContent = ''; box.appendChild(el('div', 'empty', t('عم جيب النقاط…')))
   let rows = []
-  try { rows = (await S.db.findingsFor(h.id)) || [] } catch (e) { if (seq === S.histSeq && S.view === 'history') { clear(box); box.appendChild(el('div', 'empty', 'ما قدرت جيب النقاط: ' + msg(e))) } return }
+  try { rows = (await S.db.findingsFor(h.id)) || [] } catch (e) { if (seq === S.histSeq && S.view === 'history') { clear(box); box.appendChild(el('div', 'empty', t('ما قدرت جيب النقاط: ') + msg(e))) } return }
   if (S.view !== 'history' || seq !== S.histSeq) return
   clear(box); $('findingsCount').textContent = rows.length ? String(rows.length) : ''
-  if (!rows.length) { box.appendChild(el('div', 'empty', 'ما كان في نقاط')); return }
+  if (!rows.length) { box.appendChild(el('div', 'empty', t('ما كان في نقاط'))); return }
   rows.forEach((f, i) => {
     const card = el('div', 'card ' + colorClass(f) + (f.verdict ? ' v-' + f.verdict : '')); card.appendChild(cardHead(f, i))
     const body = el('div', 'cardBody'); const thumb = el('img', 'thumb'); thumb.alt = ''; thumb.loading = 'lazy'
     if (f.crop_path) thumb.src = S.db.publicUrl(f.crop_path); body.appendChild(thumb); body.appendChild(el('div', 'why', f.why || '')); card.appendChild(body)
     const foot = el('div', 'cardFoot')
-    const chipText = { confirmed: '✓ عيب', rejected: '✗ مش عيب', added: '➕ علّمتها المفتشة' }[f.verdict] || 'بلا قرار'
+    const chipText = { confirmed: t('✓ عيب'), rejected: t('✗ مش عيب'), added: t('➕ علّمتها المفتشة') }[f.verdict] || t('بلا قرار')
     foot.appendChild(el('span', 'chip ' + (f.verdict || ''), chipText))
     if (f.worker_name) foot.appendChild(el('span', 'chip', [f.worker_name, f.stage].filter(Boolean).join(' · ')))
     card.appendChild(foot); box.appendChild(card)

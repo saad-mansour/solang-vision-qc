@@ -169,8 +169,9 @@ detection (the A/B above) and tiles were skipped only where the box held pure ta
 
 ```
 shared/pipeline.js            the inspection pipeline (browser and Node share it; adapters are injected)
-station/                      the station page (plain ES modules, RTL Arabic, no build step)
+station/                      the station page (plain ES modules, Arabic RTL with an English switch, no build step)
   index.html · style.css · app.js     UI
+  i18n.js · welcome.js                UI language (Arabic is the source text, English on top) · first-visit card
   camera.js · browser-image.js        camera + stillness detector, image adapter
   api.js                              proxy client + Supabase REST client
   config.example.js → config.js       per-deployment values (publishable key + station token only)
@@ -218,7 +219,9 @@ In the Cloudflare dashboard: Workers & Pages → Create → Import a repository 
 **Runtime variables and secrets** → add `META_API_KEY` as a Secret (optional `STATION_TOKEN`). Every push to `main`
 redeploys. The station is at `https://<project>.<account>.workers.dev/station/` and `station/config.js` keeps
 `PROXY_URL: ''` (same origin), exactly as in local development. Live demo:
-<https://solang-vision-qc.saadmansour.workers.dev/station/>. Local check of the same setup: `npx wrangler dev` (or
+<https://solang-vision-qc.saadmansour.workers.dev/station/> — Arabic by default (the factory's language); the first
+visit shows a card to pick English or Arabic and a 3-step how-to for trying it with one phone, and `?lang=en` opens it
+in English directly. Local check of the same setup: `npx wrangler dev` (or
 `npx wrangler pages dev . --port 8788`) with the key in `.dev.vars`.
 
 **Separate worker (alternative):** [`worker/src/index.js`](worker/src/index.js) with
@@ -281,6 +284,9 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
 - **Oct 27 (night):** first real test with a phone above a table at home → two-device mode (phone = camera, tablet = review)
   → the tablet's shoot button over a Realtime channel → live view of the phone camera (WebRTC, LAN only) → pipeline
   reordering (−8 s) → garment focus, framing warnings, empty-table calibration, learning loop, 7-photo re-run.
+- **Oct 27 (day):** first-visit card (language choice, then a 3-step how-to for trying it with one phone) and a full
+  English UI (`?lang=en` or the top-bar button; the Arabic strings stay the source text, `dev/tests/test_i18n.mjs`
+  keeps code and dictionary in sync).
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.
 

@@ -186,6 +186,20 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
 - **Review screen never hijacks**: a pending piece opens by itself only on the waiting screen (`view === 'inspect'`, no piece, no image).
   While the inspector browses an old piece (history view) a new arrival only beeps + toasts; «⬅ رجوع للمراجعة» returns to waiting.
 
+### §6 additions (Oct 27, day) — UI language + first-visit card
+
+- `station/i18n.js`: `LANG` (`'ar'` | `'en'`; `?lang=` wins and is stored in `localStorage['vqc_lang']`), `t(key, vars)` with the
+  **Arabic source string as the key** (`{x}` placeholders, `{x|one|many}` plurals), `applyStatic()` for the static text of index.html
+  (text nodes + `placeholder` / `aria-label` / `title`), `setLang()` (stores, then reloads without `?lang`). A missing English value
+  falls back to the Arabic key and logs once. English flips `<html dir>` to `ltr` (an inline head script does it before first paint).
+- Every user-facing Arabic literal in app.js / live.js / camera.js goes through `t()`; `dev/tests/test_i18n.mjs` fails on a bare
+  literal, a key without English, a dead key or a placeholder mismatch. No local may be named `t` in a function that translates.
+- The pipeline takes `opts.lang` for the few `why` texts it writes itself (unsure / seen in two tiles / length); the model's own
+  sentences pass through unchanged. The review screen's «unsure» regex matches both languages.
+- `station/welcome.js`: the `#welcome` card. First visit (no `vqc_lang`): language choice (English / العربية), then the 3-step how-to
+  in that language; `localStorage['vqc_welcomed'] = '1'` ends it. `?welcome=1` and the top-bar «?» reopen the how-to; the top-bar
+  «English / عربي» switches the language. `init()` awaits the card before starting the camera, so the permission prompt comes after it.
+
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)
 
 Supabase Realtime **broadcast** over one WebSocket per device (Phoenix protocol, no library, no table, no SQL). Topic

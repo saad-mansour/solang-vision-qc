@@ -179,3 +179,18 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; direction: ltr; 
 .pickerGrid .btn { white-space: normal; }
 #btnPickerCancel { width: 100%; }
 .toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 50; padding: 12px 18px; background: #111; color: #fff; border-radius: 10px; font-weight: 700; max-width: 90vw; }
+
+/* first-visit card (welcome.js) + language / help buttons in the top bar; English flips the page to LTR (i18n.js) */
+.welcome { position: fixed; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(17,24,39,.55); overflow: auto; }
+.wcard { width: 100%; max-width: 560px; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px 20px 16px; background: #fff; border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.wlogo { font-weight: 800; font-size: 20px; margin-bottom: 10px; }
+.wtext { margin: 0 0 10px; font-size: 16px; line-height: 1.5; }
+.wtitle { margin: 0 0 10px; font-size: 19px; }
+.wsteps { margin: 0 0 10px; padding-inline-start: 22px; line-height: 1.5; }
+.wsteps li + li { margin-top: 8px; }
+.wnote { margin: 0 0 6px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.wrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.wrow .btn.big { flex: 1 1 160px; }
+.btn.lang, .btn.help { min-height: 36px; padding: 0 10px; font-size: 13px; }
+.btn.help { min-width: 36px; font-weight: 800; }
+html[dir=ltr] .cost { text-align: left; }

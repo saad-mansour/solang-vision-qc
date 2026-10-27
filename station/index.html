@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
+<!-- English chosen (?lang=en or stored): flip direction before the first paint; station/i18n.js does the rest -->
+<script>try{var l=new URLSearchParams(location.search).get('lang')||localStorage.getItem('vqc_lang');if(l==='en'){document.documentElement.lang='en';document.documentElement.dir='ltr'}}catch(e){}</script>
 <title>SOLANG Vision QC</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -24,6 +26,9 @@
     <a href="?mode=camera" data-mode="camera">📷 كاميرا</a>
     <a href="?mode=review" data-mode="review">🧐 مراجعة</a>
   </nav>
+  <!-- language (reloads) + the how-to card again (station/welcome.js) -->
+  <button type="button" id="btnLang" class="btn small lang">English</button>
+  <button type="button" id="btnHelp" class="btn small help" title="كيف أجرّب؟" aria-label="كيف أجرّب؟">?</button>
 </header>
 
 <div id="banner" class="banner" hidden></div>
@@ -124,6 +129,14 @@
   <div class="pickerHead">➕ عيب ما لقطتو — شو نوعو؟</div>
   <div id="pickerGrid" class="pickerGrid"></div>
   <button type="button" id="btnPickerCancel" class="btn">رجوع</button>
+</div>
+
+<!-- first-visit card (station/welcome.js): the page is Arabic by default → pick a language → how to try it with one phone -->
+<div id="welcome" class="welcome" hidden>
+  <div class="wcard">
+    <div class="wlogo">SOLANG Vision QC</div>
+    <div id="wBody"></div>
+  </div>
 </div>
 
 <div id="toast" class="toast" hidden></div>

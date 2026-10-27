@@ -223,7 +223,14 @@ function boxesToFull(boxes, scale, region, minFrac) {
 }
 
 // ── The inspection ────────────────────────────────────────────────────────────
+// text the pipeline itself writes into `why` (the model's sentences stay as they come); opts.lang 'en' switches it to English
+const WHY = {
+  ar: { unsure: 'مش متأكد — ', two: 'شافوها بلاطتين (', leg: 'رجل', sleeve: 'كم', shorter: ' أقصر من التانية بحوالي ', approx: '% (قياس تقريبي من شكل القطعة — تأكد بالمتر)' },
+  en: { unsure: 'Not sure — ', two: 'Seen in two tiles (', leg: 'One leg', sleeve: 'One sleeve', shorter: ' is shorter than the other by about ', approx: '% (rough estimate from the garment outline — check with a tape)' },
+}
+
 export async function inspect(img, opts) {
+  const WT = WHY[opts && opts.lang === 'en' ? 'en' : 'ar']
   const t0 = Date.now()
   const { api } = opts
   const progress = opts.onProgress || (() => {})
@@ -347,8 +354,8 @@ export async function inspect(img, opts) {
     for (const v of verified) {
       const type = v.vtype && v.vtype !== 'none' ? v.vtype : v.type
       if (v.verdict === 'defect') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: v.vconfidence, level: level(Math.max(v.vconfidence, LEVELS.amber)), severity: v.severity, why: v.vwhy, window: v.window, hits: v.hits })   // a confirmed defect is at least amber
-      else if (v.verdict === 'unsure' || v.verdict === 'error') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: Math.min(0.79, v.confidence * 0.8), level: 'amber', severity: 'minor', why: 'مش متأكد — ' + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
-      else if ((v.hits >= 2 && v.confidence >= 0.85) || v.confidence >= 0.9) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: 0.6, level: 'amber', severity: 'minor', why: 'شافوها بلاطتين (' + v.verdict + ') — ' + (v.vwhy || ''), window: v.window, hits: v.hits, unsure: true })
+      else if (v.verdict === 'unsure' || v.verdict === 'error') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: Math.min(0.79, v.confidence * 0.8), level: 'amber', severity: 'minor', why: WT.unsure + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
+      else if ((v.hits >= 2 && v.confidence >= 0.85) || v.confidence >= 0.9) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: 0.6, level: 'amber', severity: 'minor', why: WT.two + v.verdict + ') — ' + (v.vwhy || ''), window: v.window, hits: v.hits, unsure: true })
     }
     stageDone('verify', t)
     return { tileResults, candidates, verified, findings, allTiles: allTiles.length, droppedOutside }
@@ -375,7 +382,7 @@ export async function inspect(img, opts) {
           const px = mask.left + (shorterLeft ? Math.round(s.cx - s.reachL / 2) : Math.round(s.cx + s.reachR / 2)), py = mask.top + (shorterLeft ? s.yL : s.yR)
           const conf = clamp(0.55 + (agree - th.amber) / (th.red - th.amber) * 0.35, 0.55, 0.95)
           silFindings.push({ kind: 'global', source: 'silhouette', type: 'length', x: Math.round(px / scale), y: Math.round(py / scale), confidence: conf, level: agree >= th.red ? 'red' : 'amber', severity: 'major',
-            why: (g.measure === 'leg' ? 'رجل' : 'كم') + ' أقصر من التانية بحوالي ' + agree + '% (قياس تقريبي من شكل القطعة — تأكد بالمتر)', measure: { lenDiffPct: s.lenDiffPct, reachDiffPct: s.reachDiffPct } })
+            why: (g.measure === 'leg' ? WT.leg : WT.sleeve) + WT.shorter + agree + WT.approx, measure: { lenDiffPct: s.lenDiffPct, reachDiffPct: s.reachDiffPct } })
         }
       } catch (e) { warn('silhouette', e) }
     }

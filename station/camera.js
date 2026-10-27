@@ -11,6 +11,8 @@ import { makeCanvas, canvasToBlob, freeCanvas } from './browser-image.js'
  * A stream already attached to videoEl is stopped first: iOS allows one live camera at a time, so the
  * «🔄 كاميرا» switch is simply openCamera(videoEl, { facing: other }).
  */
+import { t } from './i18n.js'
+
 export async function openCamera(videoEl, { facing = 'environment', idealWidth = 4096, idealHeight = 3072 } = {}) {
   const md = typeof navigator !== 'undefined' && navigator.mediaDevices
   if (!md || typeof md.getUserMedia !== 'function') {
@@ -56,7 +58,7 @@ export async function takePhoto(cam, videoEl) {
   // A dead or paused camera must fail loudly: a frame grab would silently re-inspect the frozen preview (the PREVIOUS garment).
   if (cam) {
     const live = track && track.readyState === 'live' && !track.muted && !(videoEl && (videoEl.paused || videoEl.ended))
-    if (!live) { const e = new Error('الكاميرا وقفت — عيد تشغيلها'); e.name = 'CameraLostError'; throw e }
+    if (!live) { const e = new Error(t('الكاميرا وقفت — عيد تشغيلها')); e.name = 'CameraLostError'; throw e }
   }
   if (track && track.readyState === 'live' && typeof ImageCapture === 'function') {
     try {

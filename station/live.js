@@ -7,6 +7,8 @@
 // The phone keeps its camera track at full capture size for the stills and sends a light encode (~960 px, ≤15 fps, ≤0.8 Mbit/s).
 // Binding spec: station/CONTRACTS.md §8.
 
+import { t } from './i18n.js'
+
 const RTC_CONFIG = { iceServers: [] }
 const MAX_VIEWERS = 3
 const GATHER_MS = 1200                           // host candidates arrive within a few ms; do not wait for the full gathering timeout
@@ -48,14 +50,14 @@ export function makeSender({ send, getStream, onState }) {
   return {
     async makeOffer(req) {
       if (!req) return
-      if (!supported()) { send('rtc-fail', { req, reason: 'الموبايل ما بيدعم البث (WebRTC)' }); return }
+      if (!supported()) { send('rtc-fail', { req, reason: t('الموبايل ما بيدعم البث (WebRTC)') }); return }
       const stream = getStream()
-      if (!stream || !stream.getVideoTracks().length) { send('rtc-fail', { req, reason: 'الكاميرا مش شغّالة عالموبايل' }); return }
+      if (!stream || !stream.getVideoTracks().length) { send('rtc-fail', { req, reason: t('الكاميرا مش شغّالة عالموبايل') }); return }
       drop(req)
       if (peers.size >= MAX_VIEWERS) drop(peers.keys().next().value)
       const pc = new RTCPeerConnection(RTC_CONFIG), v = { pc, pending: [], early: [], sent: false }
       peers.set(req, v)
-      for (const t of stream.getVideoTracks()) { const s = pc.addTrack(t, stream); tune(s, t) }
+      for (const tr of stream.getVideoTracks()) { const s = pc.addTrack(tr, stream); tune(s, tr) }
       pc.onicecandidate = (e) => { if (!e.candidate || !privateCandidate(e.candidate)) return; const c = e.candidate.toJSON(); if (v.sent) send('rtc-ice', { req, cand: c }); else v.early.push(c) }
       pc.onconnectionstatechange = () => { state(req, pc.connectionState); if (pc.connectionState === 'failed' || pc.connectionState === 'closed') drop(req) }
       try {
@@ -64,7 +66,7 @@ export function makeSender({ send, getStream, onState }) {
         if (peers.get(req) !== v) return         // replaced while gathering
         send('rtc-offer', { req, sdp: privateSdp(pc.localDescription.toJSON()) })
         v.sent = true; v.early.forEach((c) => send('rtc-ice', { req, cand: c })); v.early = []
-      } catch (e) { send('rtc-fail', { req, reason: 'ما قدرت جهّز البث: ' + ((e && e.message) || e) }); drop(req) }
+      } catch (e) { send('rtc-fail', { req, reason: t('ما قدرت جهّز البث: ') + ((e && e.message) || e) }); drop(req) }
     },
     async onAnswer(req, sdp) {
       const v = peers.get(req); if (!v || !sdp || v.pc.signalingState !== 'have-local-offer') return
@@ -104,14 +106,14 @@ export function makeViewer({ send, video, onState }) {
     },
     askedAt: () => askedAt,
     // a specific failure, or — after a silent attempt — the one thing that usually fixes it
-    reason: () => lastReason || (fails >= 1 ? 'البث ما وصل بعد — الجهازين لازم يكونوا على نفس الواي فاي' : ''),
+    reason: () => lastReason || (fails >= 1 ? t('البث ما وصل بعد — الجهازين لازم يكونوا على نفس الواي فاي') : ''),
     async onOffer(r, sdp) {
       if (!r || r !== req || !sdp) return
       teardown()
       const mine = new RTCPeerConnection(RTC_CONFIG); pc = mine
       mine.ontrack = (e) => { if (pc !== mine) return; track = e.track; video.srcObject = (e.streams && e.streams[0]) || new MediaStream([e.track]); video.play().catch(() => {}); fails = 0; lastReason = ''; state('track') }
       mine.onicecandidate = (e) => { if (e.candidate && pc === mine && privateCandidate(e.candidate)) send('rtc-ice', { req: r, cand: e.candidate.toJSON() }) }
-      mine.onconnectionstatechange = () => { if (pc !== mine) return; state(mine.connectionState); if (mine.connectionState === 'failed') { lastReason = 'الشبكة ما سمحت بالاتصال المباشر بين الجهازين (واي فاي منفصل أو عزل بين الأجهزة)'; teardown() } }
+      mine.onconnectionstatechange = () => { if (pc !== mine) return; state(mine.connectionState); if (mine.connectionState === 'failed') { lastReason = t('الشبكة ما سمحت بالاتصال المباشر بين الجهازين (واي فاي منفصل أو عزل بين الأجهزة)'); teardown() } }
       try {
         await mine.setRemoteDescription(privateSdp(sdp))
         for (const c of pending) { try { await mine.addIceCandidate(c) } catch (e) { /* unreachable candidate */ } }
@@ -119,14 +121,14 @@ export function makeViewer({ send, video, onState }) {
         await mine.setLocalDescription(await mine.createAnswer())
         if (pc !== mine) return
         send('rtc-answer', { req: r, sdp: privateSdp(mine.localDescription.toJSON()) })
-      } catch (e) { lastReason = 'ما قدرت أفتح البث: ' + ((e && e.message) || e); if (pc === mine) teardown(); state('failed') }
+      } catch (e) { lastReason = t('ما قدرت أفتح البث: ') + ((e && e.message) || e); if (pc === mine) teardown(); state('failed') }
     },
     async onIce(r, cand) {
       if (r !== req || !cand || !privateCandidate(cand)) return
       if (!pc || !pc.remoteDescription) { pending.push(cand); return }
       try { await pc.addIceCandidate(cand) } catch (e) { /* unreachable candidate */ }
     },
-    onFail(r, reason) { if (r !== req) return; lastReason = reason || 'الموبايل ما قدر يبعت البث'; teardown(); state('failed') },
+    onFail(r, reason) { if (r !== req) return; lastReason = reason || t('الموبايل ما قدر يبعت البث'); teardown(); state('failed') },
     live() { return !!(pc && pc.connectionState === 'connected' && track && track.readyState === 'live' && !track.muted && video.readyState >= 2) },
     connecting() { return !!pc || (!!req && Date.now() - askedAt < 8000) },
     close() { teardown(); req = null; askedAt = 0; fails = 0; lastReason = ''; state('closed') },
