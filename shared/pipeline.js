@@ -53,9 +53,14 @@ export const PROMPTS = {
     'Ignore printed designs, intended decorations, fabric texture or heather, wrinkles, shadows, the table, labels and the tile edges. ' +
     'Flat mid-gray areas are OUTSIDE the garment (painted out on purpose): ignore them completely and never report their border. ' +
     'Answer ONLY JSON: {"defects":[{"type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge","x":0-1000,"y":0-1000,"confidence":0-1,"why":"short"}]}. Coordinates are on a 0-1000 grid of THIS tile, (0,0) top-left. If nothing, {"defects":[]}.',
+  // high-recall variant of the tile pass (opts.tilePrompt === 'recall'): over-report, the verify step decides — a missed defect costs more than a false alarm
+  tileRecall: 'You are a garment quality inspector in a children\'s clothing factory. This is ONE TILE cut from a high-resolution top-down photo of a garment lying flat on a table. ' +
+    'Point at EVERY spot that could possibly be a defect so that a second, closer look can decide — a missed defect is worse than a false alarm. Report: holes, snags or pulls, stains or discoloration of any size or faintness, loose or hanging threads even short ones, broken/skipped/double stitching, puckering, unfinished edges, lint or foreign fibers that could hide a defect. ' +
+    'Do not report printed designs, intended decorations, fabric texture or heather, wrinkles, shadows, labels, the tile edges or the flat mid-gray areas (they are outside the garment, painted out on purpose). ' +
+    'When unsure give a low confidence instead of leaving the spot out. Answer ONLY JSON: {"defects":[{"type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge","x":0-1000,"y":0-1000,"confidence":0-1,"why":"short"}]}. Coordinates are on a 0-1000 grid of THIS tile, (0,0) top-left. If truly nothing, {"defects":[]}.',
   verify: 'You are a strict garment quality inspector. This is a 2x magnified crop (about 5x5 cm of fabric) around a spot that an automatic pass flagged as a possible defect, from a children\'s garment lying flat. ' +
     'Decide what is at or near the center. verdict "defect": a real manufacturing defect (hole, snag/pull, stain or discoloration, loose thread attached to a seam or hanging from the fabric, broken/skipped/double stitching, puckering, unfinished edge). ' +
-    'verdict "lint": a removable surface fiber, dust or fluff lying on the fabric. verdict "texture": normal fabric texture/heather, a printed design, a wrinkle or a shadow. verdict "unsure": you cannot tell at this magnification. ' +
+    'verdict "lint": a removable surface fiber, dust or fluff lying LOOSE on the fabric, not attached to it. A sewing thread end that comes out of a seam, a hem or the knit — even a short one, even in the fabric\'s own color — is "defect" with type "loose_thread", not lint. verdict "texture": normal fabric texture/heather, a printed design, a wrinkle or a shadow. verdict "unsure": you cannot tell at this magnification. ' +
     'Answer ONLY JSON: {"verdict":"defect|lint|texture|unsure","type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge|none","confidence":0-1,"severity":"minor|major","why":"one sentence"}',
   verifyRefs: (k) => `The first ${k} image${k > 1 ? 's are' : ' is'} REFERENCE crop${k > 1 ? 's' : ''} from earlier pieces of this SAME product, each already judged by the human inspector as listed. ` +
     'Use them to tell this product\'s normal prints, seams, labels and texture apart from real defects. The LAST image is the spot to judge now. ',
@@ -225,8 +230,8 @@ function boxesToFull(boxes, scale, region, minFrac) {
 // ── The inspection ────────────────────────────────────────────────────────────
 // text the pipeline itself writes into `why` (the model's sentences stay as they come); opts.lang 'en' switches it to English
 const WHY = {
-  ar: { unsure: 'مش متأكد — ', two: 'شافوها بلاطتين (', leg: 'رجل', sleeve: 'كم', shorter: ' أقصر من التانية بحوالي ', approx: '% (قياس تقريبي من شكل القطعة — تأكد بالمتر)' },
-  en: { unsure: 'Not sure — ', two: 'Seen in two tiles (', leg: 'One leg', sleeve: 'One sleeve', shorter: ' is shorter than the other by about ', approx: '% (rough estimate from the garment outline — check with a tape)' },
+  ar: { unsure: 'مش متأكد — ', two: 'شافوها بلاطتين (', threadOrLint: 'خيط أم وبرة؟ — ', leg: 'رجل', sleeve: 'كم', shorter: ' أقصر من التانية بحوالي ', approx: '% (قياس تقريبي من شكل القطعة — تأكد بالمتر)' },
+  en: { unsure: 'Not sure — ', two: 'Seen in two tiles (', threadOrLint: 'Thread or lint? — ', leg: 'One leg', sleeve: 'One sleeve', shorter: ' is shorter than the other by about ', approx: '% (rough estimate from the garment outline — check with a tape)' },
 }
 
 export async function inspect(img, opts) {
@@ -305,7 +310,9 @@ export async function inspect(img, opts) {
       const abs = { x: region.x + tl.x, y: region.y + tl.y, w: tl.w, h: tl.h }
       try {
         const b64 = await img.jpeg(paint ? { ...abs, keep: focus.has, fill: FILL, quality: JQ } : { ...abs, quality: JQ })   // table painted out: the model only sees fabric
-        const r = await spark(api, PROMPTS.tile, [b64], 'low')   // minimal was faster but missed a known hole 1 run in 3
+        // high-recall prompt by default since Oct 28: on two 12 MP captures the strict prompt returned 0 candidates (low and medium effort) while
+        // the recall prompt surfaced the confirmed stain and the verify step dropped the rest; opts.tilePrompt === 'strict' keeps the old one for A/B
+        const r = await spark(api, opts.tilePrompt === 'strict' ? PROMPTS.tile : PROMPTS.tileRecall, [b64], opts.tileEffort || 'low')   // minimal was faster but missed a known hole 1 run in 3
         acct(r.usage)
         const defects = ((r.json && r.json.defects) || []).map(d => ({ ...gridToPx(d.x, d.y, abs), type: String(d.type || 'other'), confidence: clamp(+d.confidence || 0, 0, 1), why: d.why || '' }))
         progress('tile', { i, n: tiles.length, defects: defects.length })
@@ -356,6 +363,8 @@ export async function inspect(img, opts) {
       const type = v.vtype && v.vtype !== 'none' ? v.vtype : v.type
       if (v.verdict === 'defect') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: v.vconfidence, level: level(Math.max(v.vconfidence, LEVELS.amber)), severity: v.severity, why: v.vwhy, window: v.window, hits: v.hits })   // a confirmed defect is at least amber
       else if (v.verdict === 'unsure' || v.verdict === 'error') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: Math.min(0.79, v.confidence * 0.8), level: 'amber', severity: 'minor', why: WT.unsure + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
+      // thread vs lint is the inspector's call: a thread end in the fabric's own colour reads as «lint» at 2× (Saad's pulled thread, Oct 28) — amber, not dropped
+      else if ((v.type === 'loose_thread' || v.vtype === 'loose_thread') && (v.verdict === 'lint' || (v.second && v.second.verdict === 'lint'))) findings.push({ kind: 'local', source: 'tiles', type: 'loose_thread', x: v.x, y: v.y, confidence: 0.5, level: 'amber', severity: 'minor', why: WT.threadOrLint + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
       else if ((v.hits >= 2 && v.confidence >= 0.85) || v.confidence >= 0.9) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: 0.6, level: 'amber', severity: 'minor', why: WT.two + v.verdict + ') — ' + (v.vwhy || ''), window: v.window, hits: v.hits, unsure: true })
     }
     stageDone('verify', t)

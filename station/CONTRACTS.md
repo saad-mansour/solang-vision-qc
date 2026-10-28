@@ -221,6 +221,9 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   later (the review screen works from `preview.jpg`; the strip shows `preview.jpg` until `annotated.jpg` exists and refreshes on it).
 - **Bytes**: `opts.jpegQuality` (default 0.85) on every image the pipeline sends (`img.jpeg({ quality })` in both adapters); references
   2 defect + 2 not_defect at 320 px.
+- **Tile pass**: `opts.tilePrompt` `'recall'` (default since Oct 28: over-report, verify decides) | `'strict'` (the old prompt, for A/B);
+  `opts.tileEffort` `'low'` (default) | `'medium'`. The station passes neither (defaults). Capture note: on iPhone every in-browser
+  camera path (stream and `<input capture>`) yields 12 MP; a Camera-app photo picked with 📁 is 24 MP — the page says so under «⋯».
 
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)
 

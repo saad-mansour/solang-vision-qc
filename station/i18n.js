@@ -250,6 +250,6 @@ export const EN = {
   '📶 ما قدرت قيس: ': '📶 Could not measure: ', '✓ انحفظ — عم رفع الصورة الكاملة…': '✓ Saved — uploading the full photo…',
   ' · ⚠ في {n} صفحات كاميرا على هالمحطة — سكّري الزيادة': ' · ⚠ {n} camera pages on this station — close the extra ones',
   '📸 هي اللقطة — الموبايل عم يفحصها…': '📸 This is the shot — the phone is inspecting it…',
-  '📷 لقطة بجودة الكاميرا الأصلية (أدق)': '📷 Full-quality shot (phone camera app, sharper)', 'كاميرا أصلية': 'camera app',
+  'للدقة الكاملة عالآيفون: صوّر القطعة بتطبيق الكاميرا (24 ميغابكسل) وبعدين اختارها من «📁». الكاميرا من جوّا المتصفح بتعطي 12 بس.': 'Full resolution on iPhone: shoot the piece with the Camera app (24 MP), then pick it with «📁». The camera inside the browser gives 12 MP only.',
   '⚠ في صفحة كاميرا تانية مفتوحة على نفس المحطة (تبويب قديم أو نسخة الشاشة الرئيسية) — سكّرها، وإلا التابلت بيلخبط بيناتهن': '⚠ Another camera page is open on this station (an old tab or the home-screen copy) — close it, or the tablet flips between the two',
 }

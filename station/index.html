@@ -60,11 +60,10 @@
         <button type="button" id="btnMore" class="rbtn" title="المزيد" aria-label="المزيد">⋯</button>
       </div>
       <div id="moreRow" class="row moreRow" hidden>
-        <!-- the phone's own camera app (capture=environment): a 24 MP photo-mode shot on recent iPhones, where the browser stream tops out at 12 MP -->
-        <button type="button" id="btnHiRes" class="btn small">📷 لقطة بجودة الكاميرا الأصلية (أدق)</button>
-        <input type="file" id="hiresInput" accept="image/*" capture="environment" hidden>
         <button type="button" id="btnFile" class="btn small">📁 صورة من الجهاز</button>
         <input type="file" id="fileInput" accept="image/*" hidden>
+        <!-- iPhone: the browser camera (live stream AND the in-page camera sheet) gives 12 MP; only the Camera app shoots 24 MP — shoot there, then pick it here -->
+        <span class="bgStatus">للدقة الكاملة عالآيفون: صوّر القطعة بتطبيق الكاميرا (24 ميغابكسل) وبعدين اختارها من «📁». الكاميرا من جوّا المتصفح بتعطي 12 بس.</span>
         <!-- optional, once per station: a photo of the empty table, kept on this device — what differs from it is «not table» -->
         <button type="button" id="btnBg" class="btn small">🧹 صوّر الطاولة فاضية</button>
         <button type="button" id="btnBgClear" class="btn small" hidden>🗑</button>

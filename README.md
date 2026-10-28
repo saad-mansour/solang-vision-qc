@@ -27,7 +27,10 @@ only server is a thin proxy that holds the API key. The method is documented in 
    the floor.
 2. **Tiles at full resolution — Muse Spark.** The garment region is cut into overlapping 1200 px tiles
    (200 px overlap); tiles with less than 8 % garment in them are not sent. Each tile is inspected for *local* defects,
-   in parallel (10 at a time), and answers in a 0–1000 grid that is mapped back to photo pixels.
+   in parallel (10 at a time), and answers in a 0–1000 grid that is mapped back to photo pixels. The tile prompt is
+   deliberately **high-recall** (point at anything that could be a defect, low confidence allowed): on two 12 MP
+   captures the earlier strict prompt returned zero candidates while the recall prompt surfaced the confirmed stain;
+   the verify step below is the strict filter.
 3. **Merge.** The same spot seen in two overlapping tiles becomes one candidate (and counts as two hits).
 4. **Verify crops — Muse Spark.** Every candidate is re-checked on a 2× magnified 500 px crop with a tri-state
    answer: *defect / lint / texture / unsure*. If the first look is not "defect", a second opinion is asked on a 3×
@@ -300,9 +303,14 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
 - **Oct 28 (evening):** a stain the station missed twice at 12 MP was found from the same garment photographed with the
   phone's camera app (24 MP). Re-running that photo through the harness: 24 MP finds it, a 12 MP downscale does not,
   and smaller tiles (850 px) do not bring it back — capture resolution, not tiling, is the limit (the iPhone browser
-  stream tops out at 12 MP video frames; the camera app shoots 24 MP photo mode). Added «📷 Full-quality shot» under
-  «⋯» (`<input capture="environment">`: the phone's own camera app, one tap on the phone, then the usual run), the review
+  stream tops out at 12 MP video frames; the camera app shoots 24 MP photo mode). An `<input capture="environment">`
+  button was tried and dropped: on iPhone the in-page camera sheet also returns 12 MP (two shots came in at 3024×4032),
+  so the sharp path is «shoot with the Camera app, then pick it with 📁», which the page now says under «⋯». The review
   tablet holds the confirmed shot while the phone inspects, and keeps one phone when several camera pages share a station.
+  Then the real lever: the **tile prompt became high-recall** (the strict one gave 0 candidates on those 12 MP captures at
+  low *and* medium effort; the recall one surfaced the stain in 3 of 3 runs, +50 % tokens, same wall-clock), and the verify
+  prompt now treats a thread end coming out of a seam as a defect, not lint. Harness flags `--tile`, `--overlap`,
+  `--tile-effort`, `--recall` for such A/Bs.
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.
 
