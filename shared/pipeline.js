@@ -59,6 +59,11 @@ export const PROMPTS = {
     'Do not report printed designs, intended decorations, fabric texture or heather, wrinkles, shadows, labels, the tile edges or the flat mid-gray areas (they are outside the garment, painted out on purpose). ' +
     'But flaws INSIDE a print or an embroidery do count: a loose or hanging embroidery thread end, a skipped, broken or doubled embroidery stitch, a smeared, cracked or missing part of a print — look closely at the edges of embroidered shapes and letters. ' +
     'List up to 5 spots, the most suspicious first; when unsure give a low confidence instead of leaving the spot out. Answer ONLY JSON: {"defects":[{"type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge","x":0-1000,"y":0-1000,"confidence":0-1,"why":"short"}]}. Coordinates are on a 0-1000 grid of THIS tile, (0,0) top-left. If truly nothing, {"defects":[]}.',
+  // 8) embroidery / print close-up (one design per call, magnified up to 3×): the flaws that hide inside decorations
+  decor: 'You are a strict garment quality inspector. This is a magnified close-up of ONE embroidered or printed design on a children\'s garment lying flat (the design fills the image, with some fabric around it). ' +
+    'Inspect the design itself and its edges. Embroidery: loose or hanging thread ends and tails, skipped, broken, doubled or uneven stitches, gaps in outlines, puckered fabric around it. Print: cracked, peeled, smeared, faded or missing parts, ink or colour outside the outline, misaligned layers, dirt on the print. ' +
+    'Ignore the intended shape and colours of the design, fabric texture, wrinkles, shadows and the image edges. Report only what a buyer would see as a flaw. ' +
+    'Answer ONLY JSON: {"defects":[{"type":"loose_thread|stitching|print|hole|stain","x":0-1000,"y":0-1000,"confidence":0-1,"why":"short"}]}. Coordinates are on a 0-1000 grid of THIS image, (0,0) top-left. If nothing, {"defects":[]}.',
   verify: 'You are a strict garment quality inspector. This is a 2x magnified crop (about 5x5 cm of fabric) around a spot that an automatic pass flagged as a possible defect, from a children\'s garment lying flat. ' +
     'Decide what is at or near the center. verdict "defect": a real manufacturing defect (hole, snag/pull, stain or discoloration, loose thread attached to a seam or hanging from the fabric, broken/skipped/double stitching, puckering, unfinished edge). ' +
     'verdict "lint": a removable surface fiber, dust or fluff lying LOOSE on the fabric, not attached to it. A sewing thread end that comes out of a seam, a hem, the knit or an embroidery — even a short one, even in the fabric\'s or the embroidery\'s own color — is "defect" with type "loose_thread", not lint; a skipped or broken embroidery stitch is "defect" with type "stitching". verdict "texture": normal fabric texture/heather, a printed design, a wrinkle or a shadow. verdict "unsure": you cannot tell at this magnification. ' +
@@ -379,8 +384,47 @@ export async function inspect(img, opts) {
   // ── branch G: 4) silhouette (no model call) → 5) parts/mirror → 6) global pass. Findings kept in that order.
   async function globalBranch() {
     const parts = { part: g.part, measure: g.measure, boxes: [], silhouette: null, lengthDiffPct: null, mirror: null }
-    const silFindings = [], mirrorFindings = []
-    let globalFindings = []
+    const silFindings = [], mirrorFindings = [], decorFindings = []
+    let globalFindings = [], decor = null
+
+    // ── 8) embroidery / print close-ups: SAM finds the designs on the garment, each one is cut from the full-resolution photo, magnified
+    //       (up to 3×) and inspected on its own — a thread end on an embroidered eye is 2 px in the corner of a tile; here the design fills the view
+    async function decorStep() {
+      checkAbort()
+      const tD = Date.now()
+      if (opts.decor === false || garmentFailed || !garmentBox) return
+      try {
+        const texts = await Promise.all(['embroidered design', 'printed design'].map(c => samRaw(api, c, small).then(t => { usage.sam_calls += 1; return t }).catch(e => { warn('decor', e); return '' })))
+        let boxes = []
+        for (const t of texts) if (t) boxes.push(...boxesToFull(parseSamBoxes(t).filter(b => b.c == null || b.c >= 0.4), scale, region, 0))
+        // on the garment, not the garment itself, not specks; overlapping designs (embroidery + print of the same motif) merge; the largest go first
+        const gArea = region.w * region.h
+        boxes = boxes.map(b => ({ ...b, area: (b.x2 - b.x1) * (b.y2 - b.y1) })).filter(b => b.area >= 0.001 * W * H && b.area <= 0.6 * gArea).sort((p, q) => q.area - p.area)
+        const iou = (a, b) => { const ix = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1)), iy = Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1)), i = ix * iy; return i / (a.area + b.area - i) }
+        const kept = []
+        for (const b of boxes) if (!kept.some(k => iou(k, b) > 0.4)) kept.push(b)
+        const sel = kept.slice(0, opts.decorMax || 4)
+        decor = { found: kept.length, sent: sel.length, boxes: sel.map(b => ({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1) })) }
+        progress('decor', { count: sel.length })
+        await mapLimit(sel, 4, async (b) => {
+          checkAbort()
+          const m = 0.15 * Math.max(b.x2 - b.x1, b.y2 - b.y1)
+          const x1 = clamp(Math.round(b.x1 - m), 0, W - 2), y1 = clamp(Math.round(b.y1 - m), 0, H - 2), x2 = clamp(Math.round(b.x2 + m), x1 + 2, W), y2 = clamp(Math.round(b.y2 + m), y1 + 2, H)
+          const abs = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
+          const up = Math.min(3, Math.max(1, 1200 / Math.max(abs.w, abs.h)))     // magnify until the design spans ~1200 px (at most 3×)
+          try {
+            const b64 = await img.jpeg({ ...abs, resize: { w: Math.round(abs.w * up), h: Math.round(abs.h * up) }, quality: JQ })
+            const r = await spark(api, PROMPTS.decor, [b64], 'low'); acct(r.usage)
+            for (const d of ((r.json && r.json.defects) || [])) {
+              const c = clamp(+d.confidence || 0, 0, 1); if (c < LEVELS.amber) continue
+              const p = gridToPx(d.x, d.y, abs)
+              decorFindings.push({ kind: 'local', source: 'decor', type: ['loose_thread', 'stitching', 'print', 'hole', 'stain'].includes(d.type) ? d.type : 'print', x: p.x, y: p.y, confidence: c, level: level(c), severity: c >= LEVELS.red ? 'major' : 'minor', why: d.why || '' })
+            }
+          } catch (e) { warn('decor', e) }
+        })
+      } catch (e) { warn('decor', e) }
+      stageDone('decor', tD)
+    }
 
     // ── 4) silhouette measurement from the SAM mask
     checkAbort()
@@ -461,16 +505,18 @@ export async function inspect(img, opts) {
       } catch (e) { warn('global', e) }
       stageDone('global', tGl)
     }
-    await Promise.all([partsStep(), globalStep()])
-    return { parts, findings: [...silFindings, ...mirrorFindings, ...globalFindings] }
+    await Promise.all([partsStep(), globalStep(), decorStep()])
+    return { parts, decor, findings: [...silFindings, ...mirrorFindings, ...globalFindings, ...decorFindings] }
   }
 
   // both branches only need step 1's region / mask / small image → run them side by side (an abort in either rejects the whole inspection)
   const [L, G] = await Promise.all([localBranch(), globalBranch()])
   timings.total = Date.now() - t0
+  // a design flaw the tiles already found (and verify confirmed) is not reported twice
+  const gFindings = G.findings.filter(f => f.source !== 'decor' || !L.findings.some(l => Math.hypot(l.x - f.x, l.y - f.y) < 150))
 
   return {
-    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...G.findings], parts: G.parts, usage, timings,
+    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...gFindings], parts: G.parts, decor: G.decor, usage, timings,
     framing, focus: focus ? { tiles: L.allTiles, sent: L.tileResults.length, skipped: L.allTiles - L.tileResults.length, droppedOutside: L.droppedOutside, painted: paint, marginPx: focus.margin * focus.cell } : null,
   }
 }

@@ -16,7 +16,7 @@ the system can learn from the people who actually know the garments.
 
 ## How it works
 
-One photo (typically 4284×5712 from a phone camera) goes through seven steps. Everything runs in the browser; the
+One photo (typically 3024×4032 from the phone's browser camera, 4284×5712 from its camera app) goes through eight steps. Everything runs in the browser; the
 only server is a thin proxy that holds the API key. The method is documented in [`shared/pipeline.js`](shared/pipeline.js).
 
 1. **Find the garment — SAM 3.1.** A downscaled copy is sent with a concept prompt (`pants`, `sweatshirt`, …).
@@ -44,6 +44,11 @@ only server is a thin proxy that holds the API key. The method is documented in 
    "different" before an asymmetry finding is raised (one answer alone is fooled by how the fabric is laid).
 7. **Global pass — Muse Spark.** The whole garment, downscaled, optionally next to a known-good reference: misplaced
    or incomplete print, missing part, twisted seam.
+8. **Embroidery and print close-ups — SAM 3.1 + Muse Spark.** SAM is asked for the *embroidered* and *printed* designs on
+   the garment; each one (up to 4, largest first) is cut from the full-resolution photo, magnified up to 3× and inspected
+   on its own for loose embroidery thread ends, skipped or broken stitches, cracked or missing print. A thread end on an
+   embroidered eye is 2 px in the corner of a tile; here the design fills the model's view. Findings the tiles already
+   confirmed within 150 px are not reported twice.
 
 ```
  phone/tablet above the QC table
@@ -313,7 +318,10 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
   thread but surfaced only one candidate and missed the stain, so the prompt now asks for *up to 5 spots, most suspicious
   first*: on that capture 2 of 2 harness runs then found both (stain amber ~65–70 %, thread red 80–85 %). `opts.tilePasses`
   (2 = ask every tile twice, duplicates merge into hits) adds +40 % tokens and +3 s and surfaced a second, black thread
-  loop both times — the station now runs with it, by the factory's choice («the first time it found something I had not seen»). Harness flags `--tile`, `--overlap`, `--tile-effort`,
+  loop both times — the station now runs with it, by the factory's choice («the first time it found something I had not seen»).
+  Last of the day, the one miss that resisted everything: a thread tail on an embroidered eye (about 2 px wide at 12 MP).
+  Step 8 (embroidery / print close-ups) found it in 2 of 2 runs («thin stray thread extending from eye stitch» 75 %, «light
+  thread tail hanging from black outline» 90 %) at +2 SAM calls, +3 Spark calls and about +4 s on the same capture. Harness flags `--tile`, `--overlap`, `--tile-effort`,
   `--strict`, `--passes` for such A/Bs.
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.

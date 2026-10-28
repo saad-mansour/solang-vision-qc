@@ -57,7 +57,7 @@ if (arg('--bg', null)) {
   else console.log('  ! --bg ignored: different frame size than the photo')
 }
 const t0 = Date.now()
-const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, concurrency: +arg('--conc', 6) || 6, foreground: fg, tileSize: +arg('--tile', 1200) || 1200, overlap: +arg('--overlap', 200) || 200, tileEffort: arg('--tile-effort', 'low'), tilePrompt: process.argv.includes('--strict') ? 'strict' : 'recall', tilePasses: +arg('--passes', 1) || 1, focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
+const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, concurrency: +arg('--conc', 6) || 6, foreground: fg, tileSize: +arg('--tile', 1200) || 1200, overlap: +arg('--overlap', 200) || 200, tileEffort: arg('--tile-effort', 'low'), tilePrompt: process.argv.includes('--strict') ? 'strict' : 'recall', tilePasses: +arg('--passes', 1) || 1, decor: !process.argv.includes('--no-decor'), focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
 const name = path.basename(file).replace(/\.[^.]+$/, '')
 fs.writeFileSync(path.join(outDir, name + '.json'), JSON.stringify(res, null, 1))
 // annotate: downscale to 1600 and draw circles (red ≥0.8, amber ≥0.5, blue = global/measurement)
@@ -77,4 +77,5 @@ console.log('  garment:', res.garmentBox ? `${res.garmentBox.concept} c=${res.ga
 console.log('  focus:', res.focus ? `${res.focus.sent}/${res.focus.tiles} tiles sent (${res.focus.skipped} table tiles skipped) · ${res.focus.droppedOutside} candidates outside the garment dropped · painted=${res.focus.painted} · margin ${res.focus.marginPx} px` : 'off (no mask)', '· framing:', JSON.stringify(res.framing))
 res.findings.forEach((f, i) => console.log(`  ${i + 1}. [${f.level}] ${f.source}/${f.type} ${Math.round(f.confidence * 100)}% at (${f.x},${f.y})${f.hits ? ' hits=' + f.hits : ''}${f.unsure ? ' (unsure)' : ''} — ${f.why}`))
 if (res.parts) console.log('  parts:', JSON.stringify({ part: res.parts.part, silhouette: res.parts.silhouette, mirror: res.parts.mirror && { different: res.parts.mirror.different, c: res.parts.mirror.confidence, votes: res.parts.mirror.votes } }))
+if (res.decor) console.log('  decor:', JSON.stringify(res.decor))
 console.log('  rejected:', res.verified.filter(v => ['lint', 'texture'].includes(v.verdict)).map(v => `${v.type}@(${v.x},${v.y}) ${v.verdict}${v.second ? '+' + v.second.verdict : ''}`).join(' | ') || 'none')

@@ -224,7 +224,13 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
 - **Tile pass**: `opts.tilePrompt` `'recall'` (default since Oct 28: over-report, up to 5 spots per tile, verify decides) | `'strict'` (the old
   prompt, for A/B); `opts.tileEffort` `'low'` (default) | `'medium'`; `opts.tilePasses` 1 (default) … 3 = independent samples of the same
   tile, merged by `mergeCandidates` (a spot seen twice has `hits` 2), `usage.calls` counts every pass. The station passes `tilePasses: 2`
-  (Saad's call on Oct 28 after it surfaced a thread loop he had not seen) and leaves the rest at the defaults. Capture note: on iPhone every in-browser
+  (Saad's call on Oct 28 after it surfaced a thread loop he had not seen) and leaves the rest at the defaults.
+- **Step 8, embroidery / print close-ups** (`opts.decor !== false`, `opts.decorMax` 4): inside branch G, after the garment is found: SAM with
+  `embroidered design` and `printed design` on the small copy → boxes on the garment (0.1 % of the frame ≤ area ≤ 60 % of the garment, IoU > 0.4
+  merged, largest first) → each cut from the full photo with a 15 % margin, magnified up to 3× (~1200 px), `PROMPTS.decor` at low effort →
+  findings `{kind:'local', source:'decor', type: loose_thread|stitching|print|hole|stain, level by confidence}` (≥ amber only). Progress
+  `decor{count}`, `stage_done decor`, `timings.decor`; `result.decor = {found, sent, boxes}`. A decor finding within 150 px of a confirmed tile
+  finding is dropped. The station shows the tag «تطريز/طباعة» on such cards. Skipped when the garment stage failed or found no box. Capture note: on iPhone every in-browser
   camera path (stream and `<input capture>`) yields 12 MP; a Camera-app photo picked with 📁 is 24 MP — the page says so under «⋯».
 
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)

@@ -350,6 +350,7 @@ function onProgress(stage, info) {
     case 'verify': S.progL = info.count ? t('عم أكد {n} نقطة{ex}…', { n: info.count, ex: info.examples ? t(' مع {k} أمثلة من المفتشة', { k: info.examples }) : '' }) : t('ما في نقاط مشبوهة بالبلاطات'); two(); break
     case 'parts': S.progG = t('عم قارن اليمين بالشمال…'); two(); break
     case 'global': S.progG = t('نظرة عامة…'); two(); break
+    case 'decor': S.progG = info.count ? t('عم فحص {n} تطريز/طباعة عن قرب…', { n: info.count }) : S.progG; two(); break
     case 'stage_done':
       if (info.stage === 'verify') S.progL = t('النقاط المحلية خلصت ✓')
       if (info.stage === 'global') S.progG = ''
@@ -542,6 +543,7 @@ function cardHead(f, i) {
   head.appendChild(el('span', 'type', TYPE_AR[f.type] || f.type || t('شي تاني')))
   head.appendChild(el('span', 'conf', Math.round((+f.confidence || 0) * 100) + '%'))
   if (f.kind === 'global') head.appendChild(el('span', 'tag', f.source === 'silhouette' ? t('قياس') : f.source === 'mirror' ? t('مقارنة') : t('عام')))
+  if (f.source === 'decor') head.appendChild(el('span', 'tag', t('تطريز/طباعة')))
   if (f.unsure) head.appendChild(el('span', 'tag unsure', t('مش متأكد')))
   if (f.severity === 'major' && f.source !== 'inspector') head.appendChild(el('span', 'tag unsure', t('كبير')))
   head.addEventListener('click', () => highlightMark(i))

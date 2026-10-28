@@ -119,6 +119,7 @@ export const EN = {
   'عم أكد {n} نقطة{ex}…': 'Verifying {n} {n|spot|spots}{ex}…', ' مع {k} أمثلة من المفتشة': ' with {k} inspector {k|example|examples}',
   'ما في نقاط مشبوهة بالبلاطات': 'No suspicious spots in the tiles',
   'عم قارن اليمين بالشمال…': 'Comparing left and right…', 'نظرة عامة…': 'Overall look…', 'النقاط المحلية خلصت ✓': 'Local spots done ✓',
+  'عم فحص {n} تطريز/طباعة عن قرب…': 'Checking {n} {n|design|designs} up close…', 'تطريز/طباعة': 'embroidery/print',
   'ما لقيت قطعة واضحة بالصورة': 'No clear garment in the photo', ' ث': ' s',
   ' · ركّز عالقطعة: {sent}/{tiles} بلاطة{dropped}': ' · garment focus: {sent}/{tiles} tiles{dropped}', ' · شال {k} نقطة برّا القطعة': ' · dropped {k} outside the garment',
   ' · 🧠 {k} أمثلة من المفتشة': ' · 🧠 {k} inspector {k|example|examples}',
