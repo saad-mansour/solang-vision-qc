@@ -84,6 +84,8 @@
         <!-- live view of the phone camera (WebRTC, same Wi-Fi only — station/live.js); small tile while a piece is open, tap to enlarge -->
         <div id="liveWrap" class="liveWrap" hidden>
           <video id="liveView" autoplay muted playsinline></video>
+          <!-- the frame at the moment the phone confirmed the shot: shown still while the phone inspects, until the piece opens -->
+          <canvas id="liveStill" class="liveStill" hidden></canvas>
           <span id="liveCap" class="liveCap">📡 عم وصل بث الكاميرا…</span>
         </div>
       </div>

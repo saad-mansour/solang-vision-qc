@@ -52,6 +52,7 @@ const S = {
   link: null, linkUp: false, peer: null, peerSeen: 0, capReq: null, lastSavedId: null, linkTimer: null,              // phone ⇄ tablet link (link.js)
   peers: new Map(), twinSeen: 0,                                                                                       // review: every camera page heard (by boot); camera: another camera page on this station
   live: null, liveBig: false, liveLostAt: 0, liveWasLive: false, peerBoot: null, boot: Math.random().toString(36).slice(2),   // live view (live.js); boot = this page load's identity
+  liveFrozenAt: 0,                                                                                                     // the live tile shows the frozen shot while the phone inspects
   seenReq: new Set(), lastRemoteShot: 0,                                                                              // remote shots: no replays, one per 6 s
   noGarment: false, framing: null,                                                                                    // focus / framing of the current run
 }
@@ -885,6 +886,7 @@ function onLinkMessage(event, p) {
   if (event === 'ack' && S.capReq && p.req === S.capReq.req) {
     clearTimeout(S.capReq.timer); S.capReq = null
     toast(p.ok ? t('📷 الموبايل عم يصوّر…') : t('الموبايل ما صوّر: ') + (p.reason || '')); renderLink()
+    if (p.ok) freezeLive()                                     // the moving feed is confusing while the phone inspects: hold the shot instead
   } else if (event === 'saved') reviewTick()
 }
 // The tablet may hear several camera pages on one station (an old tab left open, the home-screen copy, a second phone): they alternate every
@@ -940,10 +942,24 @@ function onRtc(event, p) {
   if (MODE === 'camera') { if (event === 'rtc-want') linkOk(p).then((ok) => ok ? S.live.makeOffer(p.req) : S.link.send('rtc-fail', { req: p.req, reason: t('رمز الربط مش مطابق') })); else if (event === 'rtc-answer') S.live.onAnswer(p.req, p.sdp); else if (event === 'rtc-ice') S.live.onIce(p.req, p.cand) }
   else if (MODE === 'review') { if (event === 'rtc-offer') S.live.onOffer(p.req, p.sdp); else if (event === 'rtc-ice') S.live.onIce(p.req, p.cand); else if (event === 'rtc-fail') S.live.onFail(p.req, p.reason) }
 }
+// the shot the phone just confirmed: the live tile holds that frame (drawn from the stream) until the piece opens on this screen,
+// or until the phone is idle again for a while (nothing came — no garment, a failure), or 2 minutes at most
+function freezeLive() {
+  const v = $('liveView'), c = $('liveStill')
+  if (!S.live || !S.live.live() || !v.videoWidth) return
+  c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0, c.width, c.height)
+  c.hidden = false; S.liveFrozenAt = Date.now(); renderLive()
+}
+function unfreezeLive() { if (!S.liveFrozenAt) return; S.liveFrozenAt = 0; $('liveStill').hidden = true; renderLive() }
+
 // the tablet keeps a live view while the phone has a working camera and this page is visible; drops it otherwise
 function maintainLive() {
   if (MODE !== 'review' || !S.live || !S.live.supported()) return
   const alive = !!S.peer && Date.now() - S.peerSeen < PEER_TTL_MS
+  if (S.liveFrozenAt) {
+    const idleFor = alive && (S.peer.state === 'idle' || S.peer.state === 'nocam') && !S.capReq
+    if (Date.now() - S.liveFrozenAt > 120000 || (idleFor && Date.now() - S.liveFrozenAt > 8000) || !alive) unfreezeLive()
+  }
   const can = alive && S.peer.state !== 'nocam' && document.visibilityState === 'visible'   // a signaling blip (link down for a moment) does not kill a running stream
   if (!can) { if (S.live.connecting() || S.live.live() || S.live.askedAt()) S.live.close(); S.liveLostAt = 0; S.liveWasLive = false; renderLive(); return }
   const now = Date.now()
@@ -959,12 +975,13 @@ function renderLive() {
   if (MODE !== 'review' || !S.live) return
   const w = $('liveWrap'), reason = S.live.reason()
   const live = S.live.live() || (S.liveWasLive && !!S.liveLostAt && Date.now() - S.liveLostAt < LIVE_GRACE_MS && S.live.connecting())   // inside the grace window the last frame stays up (only once frames had arrived)
-  const show = live || S.live.connecting() || !!reason
+  const frozen = !!S.liveFrozenAt
+  const show = frozen || live || S.live.connecting() || !!reason
   w.hidden = !show; if (!show) return
-  w.classList.toggle('live', live); w.classList.toggle('small', !!S.reviewId && !S.liveBig)
+  w.classList.toggle('live', live); w.classList.toggle('frozen', frozen); w.classList.toggle('small', !!S.reviewId && !S.liveBig)
   const tl = S.live.timeline ? S.live.timeline() : null, s = tl ? Math.round(tl.since) : 0
   const step = tl && tl.since >= 2 ? (tl.connected != null ? t(' · {s} ث: اتصل، ناطر أول صورة', { s }) : tl.offer != null ? t(' · {s} ث: العرض وصل، عم يتصل', { s }) : t(' · {s} ث: ناطر عرض من الموبايل', { s })) : ''   // where the attempt stands (the «why is it slow» line)
-  $('liveCap').textContent = live ? t('📡 مباشر من الموبايل') + (S.reviewId && !S.liveBig ? t(' — كبسي للتكبير') : '') : reason ? '📡 ' + reason + step : t('📡 عم وصل بث الكاميرا…') + step
+  $('liveCap').textContent = frozen ? t('📸 هي اللقطة — الموبايل عم يفحصها…') : live ? t('📡 مباشر من الموبايل') + (S.reviewId && !S.liveBig ? t(' — كبسي للتكبير') : '') : reason ? '📡 ' + reason + step : t('📡 عم وصل بث الكاميرا…') + step
 }
 // status line on both devices; on the tablet also the «📸» button (enabled only when the phone can shoot now)
 function renderLink() {
@@ -1030,7 +1047,7 @@ async function openReview(h) {
   if (S.reviewOpening) return
   S.reviewOpening = true
   try {
-    resetInspection(); setView('inspect'); $('viewHead').hidden = true
+    resetInspection(); setView('inspect'); $('viewHead').hidden = true; unfreezeLive()   // the piece is here: back to the live feed
     S.reviewId = h.id; S.reviewDate = (h.photo_path || '').split('/')[0] || ymd(new Date(h.created_at)); S.reviewLocked = false
     S.order = S.orders.find((o) => o.order_number === h.order_number) || null
     if (S.order) { $('orderSel').value = String(S.orders.indexOf(S.order)) }
