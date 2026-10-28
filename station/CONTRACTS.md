@@ -232,7 +232,13 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   `decor{count}`, `stage_done decor`, `timings.decor`; `result.decor = {found, sent, boxes}`. `opts.decorPasses` 1…3 (station: 2) and
   `opts.decorEffort` ('low'). A decor finding that coincides with a tile finding (same type within 150 px, or anything within 40 px) is not
   added; when it is more confident it rewrites that tile finding's type / confidence / level / why and sets `decor: true`. The station shows
-  the tag «تطريز/طباعة» on cards with `source === 'decor' || decor`. Skipped when the garment stage failed or found no box. Capture note: on iPhone every in-browser
+  the tag «تطريز/طباعة» on cards with `source === 'decor' || decor`. Skipped when the garment stage failed or found no box.
+- **Product reference**: `db.setReference(model_code, url|null)` → `PATCH demo_orders?model_code=eq.X {reference_url}`; `listOrders` already selects
+  `reference_url`. UI: `#refBadge` (📌 next to the order), `#btnRef` in the decision bar (current piece: the review screen uses the camera
+  device's `preview.jpg` URL, the camera / single device uploads a 1600 px copy to `references/<model>/<ts>.jpg`), «⋯» `#btnRefFile` (+ `#refInput`,
+  a 1600 px copy uploaded, no inspection) and `#btnRefClear`. Every set/clear asks `confirm()`. At run time `loadReference(url)` (≤ 5 s) becomes
+  `opts.reference` (image adapter, closed after the run): the global pass compares with it (`PROMPTS.global(true)`), the close-ups get it as the
+  last reference image («a CORRECT piece of this same product») after the judged crops. Capture note: on iPhone every in-browser
   camera path (stream and `<input capture>`) yields 12 MP; a Camera-app photo picked with 📁 is 24 MP — the page says so under «⋯».
 
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)

@@ -127,6 +127,11 @@ export function makeDb(cfg) {
     })),
 
     // → the updated row, or null when no row has that id
+    // the known-good reference photo of a product: demo_orders.reference_url on every order of that model_code (null clears it)
+    setReference: async (modelCode, url) => {
+      if (!modelCode) throw new Error('setReference: model_code required')
+      return call('setReference', 'PATCH', restUrl('demo_orders', { model_code: 'eq.' + modelCode }), { body: { reference_url: url || null }, prefer: 'return=minimal' })
+    },
     updateInspection: async (id, patch) => {
       needId('updateInspection', id)
       return first(await call('updateInspection', 'PATCH', restUrl('vision_inspections', { id: 'eq.' + id }), {

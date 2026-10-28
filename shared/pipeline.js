@@ -410,8 +410,16 @@ export async function inspect(img, opts) {
         // the inspector's earlier verdicts on this product ride along here too: on #44 four of five close-up findings were intended
         // strokes of the embroidery that the inspector rejected — those crops are exactly the «not a defect» references the next run needs
         const dex = sel.length ? await resolveExamples(opts.examples) : []
-        const dRefText = dex.length ? PROMPTS.verifyRefs(dex.length) + dex.map((e, i) => `Image ${i + 1}: ${e.label === 'defect' ? 'DEFECT' : 'NOT A DEFECT'}${e.type ? ' (' + e.type + ')' : ''}`).join('; ') + '. ' : ''
+        let dRefText = dex.length ? PROMPTS.verifyRefs(dex.length) + dex.map((e, i) => `Image ${i + 1}: ${e.label === 'defect' ? 'DEFECT' : 'NOT A DEFECT'}${e.type ? ' (' + e.type + ')' : ''}`).join('; ') + '. ' : ''
         const dRefImgs = dex.map(e => e.b64)
+        // the product's correct piece (opts.reference), whole garment at ≤ 1000 px: how the designs are supposed to look — intended strokes stop reading as flaws
+        if (sel.length && opts.reference) {
+          try {
+            const R = opts.reference, rs = Math.min(1, 1000 / Math.max(R.width, R.height))
+            dRefImgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) }, quality: JQ }))
+            dRefText += `Image ${dRefImgs.length} is a CORRECT piece of this same product (whole garment, approved reference): the designs on it show how they are supposed to look — a stroke that exists there is intended. `
+          } catch (e) { warn('decor', e) }
+        }
         await mapLimit(sel, 4, async (b) => {
           checkAbort()
           const m = 0.15 * Math.max(b.x2 - b.x1, b.y2 - b.y1)

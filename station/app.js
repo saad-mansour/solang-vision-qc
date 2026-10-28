@@ -125,7 +125,11 @@ async function init() {
 }
 
 function wire() {
-  $('orderSel').addEventListener('change', () => { S.order = S.orders[+$('orderSel').value] || null; if (S.order) lsSet('vqc_order', S.order.order_number) })
+  $('orderSel').addEventListener('change', () => { S.order = S.orders[+$('orderSel').value] || null; if (S.order) lsSet('vqc_order', S.order.order_number); renderRef() })
+  $('btnRef').addEventListener('click', setReferenceFromCurrent)
+  $('btnRefFile').addEventListener('click', () => $('refInput').click())
+  $('refInput').addEventListener('change', () => { const f = $('refInput').files && $('refInput').files[0]; $('refInput').value = ''; if (f) setReferenceFromFile(f) })
+  $('btnRefClear').addEventListener('click', clearReference)
   $('sideFront').addEventListener('click', () => setSide('front'))
   $('sideBack').addEventListener('click', () => setSide('back'))
   $('inspector').addEventListener('input', () => { S.inspector = $('inspector').value.trim(); lsSet('vqc_inspector', S.inspector) })
@@ -160,6 +164,63 @@ function renderOrders(list) {
   S.orders.forEach((o, i) => sel.appendChild(opt(String(i), [o.order_number, o.product, o.color, o.line].filter(Boolean).join(' · '))))
   const last = lsGet('vqc_order'); const idx = Math.max(0, S.orders.findIndex((o) => o.order_number === last))
   sel.value = String(idx); S.order = S.orders[idx]
+  renderRef()
+}
+
+// ── the product's reference photo: a correct piece, flat, from above (demo_orders.reference_url, one per model_code) ────────────
+// Set from the piece on the screen («📌 اعتمدها مرجع للموديل», decision bar) or from a photo file («⋯ → 📌 مرجع من صورة», no inspection).
+// Used by the global pass (compare with the correct piece) and by the embroidery / print close-ups (how the designs should look).
+function renderRef() {
+  const has = !!(S.order && S.order.reference_url)
+  $('refBadge').hidden = !has; $('btnRefClear').hidden = !has
+  $('btnRef').hidden = !(S.order && S.order.model_code && S.view === 'inspect' && (S.img || S.reviewId) && !S.running)
+}
+function applyReference(modelCode, url) {
+  S.orders.forEach((o) => { if (o.model_code === modelCode) o.reference_url = url })
+  renderRef()
+}
+async function storeReference(modelCode, url) {
+  await S.db.setReference(modelCode, url); applyReference(modelCode, url)
+  toast(url ? t('📌 انحفظ المرجع للموديل {m}', { m: modelCode }) : t('انشال مرجع الموديل'))
+}
+// a 1600 px copy of an image adapter, uploaded under references/<model>/ → its public URL
+async function uploadReferenceFrom(img, modelCode) {
+  const blob = await (await fetch(await img.previewUrl(1600))).blob()
+  return S.db.uploadPhoto(`references/${encodeURIComponent(modelCode)}/${Date.now()}.jpg`, blob)
+}
+async function setReferenceFromCurrent() {
+  const o = S.order; if (!o || !o.model_code || !S.db) { toast(t('ما في طلبية مختارة')); return }
+  if (!confirm(t('تعتمد هالقطعة صورة مرجعية صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code }))) return
+  try {
+    toast(t('عم أحفظ المرجع…'))
+    let url = null
+    if (S.reviewId && S.reviewPhotoUrl) url = S.reviewPhotoUrl.replace(/photo\.jpg$/, 'preview.jpg')   // review screen: the camera device already uploaded the preview
+    else if (S.img) url = await uploadReferenceFrom(S.img, o.model_code)
+    if (!url) { toast(t('ما في صورة لاعتمادها')); return }
+    await storeReference(o.model_code, url)
+  } catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) }
+}
+async function setReferenceFromFile(file) {
+  const o = S.order; if (!o || !o.model_code || !S.db) { toast(t('ما في طلبية مختارة')); return }
+  if (!confirm(t('تعتمد هالصورة مرجع صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code }))) return
+  let img = null
+  try { toast(t('عم أحفظ المرجع…')); img = await fromBlob(file); await storeReference(o.model_code, await uploadReferenceFrom(img, o.model_code)) }
+  catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) } finally { safeClose(img) }
+}
+async function clearReference() {
+  const o = S.order; if (!o || !o.model_code || !S.db) return
+  if (!confirm(t('تشيل الصورة المرجعية للموديل {m}؟', { m: o.model_code }))) return
+  try { await storeReference(o.model_code, null) } catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) }
+}
+// the reference photo as an image adapter for the pipeline (≤ 5 s, anything wrong → none)
+async function loadReference(url) {
+  if (!url) return null
+  try {
+    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 5000)
+    const r = await fetch(url, { signal: ctl.signal }); clearTimeout(tm)
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    return await fromBlob(await r.blob())
+  } catch (e) { return null }
 }
 
 async function refreshStats() {
@@ -275,6 +336,7 @@ async function runInspection(blob, sourceLabel) {
   S.blob = blob; S.source = sourceLabel
   const controller = new AbortController(); S.controller = controller
   const order = S.order
+  let reference = null
   S.warns = []; S.tilesDone = 0; S.progL = ''; S.progG = ''; $('progressWarn').textContent = ''; $('progressWarn').title = ''
   $('progress').hidden = false; $('btnCancel').hidden = false; $('runError').hidden = true; $('costLine').textContent = ''
   setProgress(t('عم جهّز الصورة…')); startTimer()
@@ -285,10 +347,11 @@ async function runInspection(blob, sourceLabel) {
     // references for the verifier (fetched while SAM runs) and the empty-table comparison (local, no model call)
     const examples = (S.db && order && order.model_code) ? loadExamples(order.model_code) : []
     const foreground = await foregroundFor(img)
+    reference = await loadReference(order && order.reference_url)   // the product's correct piece, for the global pass and the design close-ups
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, requireGarment: true, lang: LANG, tilePasses: 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, reference, requireGarment: true, lang: LANG, tilePasses: 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress(t('انلغى الفحص')); return }
@@ -314,8 +377,8 @@ async function runInspection(blob, sourceLabel) {
     if (controller.signal.aborted) setProgress(t('انلغى الفحص'))
     else { setProgress(t('وقف الفحص')); $('runErrorText').textContent = msg(e) + (e && e.stack && !String(e.stack).startsWith(msg(e)) ? '\n' + e.stack : ''); $('runError').hidden = false }
   } finally {
-    stopTimer(); S.running = false; S.controller = null; $('btnCancel').hidden = true
-    sendState()
+    stopTimer(); S.running = false; S.controller = null; $('btnCancel').hidden = true; safeClose(reference)
+    sendState(); renderRef()
     // cards are refreshed here (after running=false) so a cancel / error / undecodable photo shows a way out instead of a stale «عم فحص…»
     if (S.view === 'inspect') { renderCards(); $('decisionBar').hidden = false; updateSaveEnabled(); $('tapHint').hidden = !S.img }
   }
@@ -530,6 +593,7 @@ function renderAll() { renderOverlay(); renderCards(); updateSaveEnabled() }
 // the decision buttons judge the WHOLE piece; this line above them says what the per-spot verdicts add up to
 function renderDecSummary() {
   const s = $('decSummary'), n = S.findings.length
+  renderRef()
   if (!n || !(S.img || S.reviewId)) { s.textContent = ''; return }
   const c = S.findings.filter((f) => f.verdict === 'confirmed' || f.verdict === 'added').length, r = S.findings.filter((f) => f.verdict === 'rejected').length
   s.textContent = t('القرار تحت للقطعة كلها · النقاط: ✓ {c} عيب مؤكد · ✗ {r} مش عيب · {o} بلا حكم', { c, r, o: n - c - r })

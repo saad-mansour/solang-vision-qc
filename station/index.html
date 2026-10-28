@@ -15,6 +15,7 @@
 <header class="topbar">
   <div class="logo">SOLANG Vision QC</div>
   <select id="orderSel" class="order" aria-label="الطلبية"></select>
+  <span id="refBadge" class="refBadge" title="في صورة مرجعية لهالموديل" hidden>📌</span>
   <div class="seg" role="group" aria-label="الجهة">
     <button type="button" id="sideFront" class="segBtn active">وجه</button>
     <button type="button" id="sideBack" class="segBtn">ضهر</button>
@@ -69,6 +70,10 @@
         <button type="button" id="btnBgClear" class="btn small" hidden>🗑</button>
         <span id="bgStatus" class="bgStatus"></span>
         <button type="button" id="btnNet" class="btn small">📶 فحص الاتصال</button>
+        <!-- the product's reference photo (a correct piece, flat, from above): from a file here, or from the current piece in the decision bar -->
+        <button type="button" id="btnRefFile" class="btn small">📌 مرجع من صورة</button>
+        <input type="file" id="refInput" accept="image/*" hidden>
+        <button type="button" id="btnRefClear" class="btn small" hidden>📌 شيل مرجع الموديل</button>
         <span id="netStatus" class="bgStatus"></span>
       </div>
     </section>
@@ -129,6 +134,7 @@
       <div class="row">
         <button type="button" id="btnSave" class="btn primary" disabled>💾 حفظ</button>
         <button type="button" id="btnNew" class="btn">📷 قطعة جديدة</button>
+        <button type="button" id="btnRef" class="btn small" hidden>📌 اعتمدها مرجع للموديل</button>
       </div>
       <div id="saveStatus" class="status"></div>
       <button type="button" id="btnRetry" class="btn warnBtn" hidden>🔁 حاول الحفظ مرة تانية</button>
