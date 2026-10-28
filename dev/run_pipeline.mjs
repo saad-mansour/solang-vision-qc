@@ -57,7 +57,7 @@ if (arg('--bg', null)) {
   else console.log('  ! --bg ignored: different frame size than the photo')
 }
 const t0 = Date.now()
-const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, concurrency: +arg('--conc', 6) || 6, foreground: fg, tileSize: +arg('--tile', 1200) || 1200, overlap: +arg('--overlap', 200) || 200, tileEffort: arg('--tile-effort', 'low'), tilePrompt: process.argv.includes('--strict') ? 'strict' : 'recall', focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
+const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, concurrency: +arg('--conc', 6) || 6, foreground: fg, tileSize: +arg('--tile', 1200) || 1200, overlap: +arg('--overlap', 200) || 200, tileEffort: arg('--tile-effort', 'low'), tilePrompt: process.argv.includes('--strict') ? 'strict' : 'recall', tilePasses: +arg('--passes', 1) || 1, focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
 const name = path.basename(file).replace(/\.[^.]+$/, '')
 fs.writeFileSync(path.join(outDir, name + '.json'), JSON.stringify(res, null, 1))
 // annotate: downscale to 1600 and draw circles (red ≥0.8, amber ≥0.5, blue = global/measurement)

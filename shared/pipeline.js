@@ -57,7 +57,7 @@ export const PROMPTS = {
   tileRecall: 'You are a garment quality inspector in a children\'s clothing factory. This is ONE TILE cut from a high-resolution top-down photo of a garment lying flat on a table. ' +
     'Point at EVERY spot that could possibly be a defect so that a second, closer look can decide — a missed defect is worse than a false alarm. Report: holes, snags or pulls, stains or discoloration of any size or faintness, loose or hanging threads even short ones, broken/skipped/double stitching, puckering, unfinished edges, lint or foreign fibers that could hide a defect. ' +
     'Do not report printed designs, intended decorations, fabric texture or heather, wrinkles, shadows, labels, the tile edges or the flat mid-gray areas (they are outside the garment, painted out on purpose). ' +
-    'When unsure give a low confidence instead of leaving the spot out. Answer ONLY JSON: {"defects":[{"type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge","x":0-1000,"y":0-1000,"confidence":0-1,"why":"short"}]}. Coordinates are on a 0-1000 grid of THIS tile, (0,0) top-left. If truly nothing, {"defects":[]}.',
+    'List up to 5 spots, the most suspicious first; when unsure give a low confidence instead of leaving the spot out. Answer ONLY JSON: {"defects":[{"type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge","x":0-1000,"y":0-1000,"confidence":0-1,"why":"short"}]}. Coordinates are on a 0-1000 grid of THIS tile, (0,0) top-left. If truly nothing, {"defects":[]}.',
   verify: 'You are a strict garment quality inspector. This is a 2x magnified crop (about 5x5 cm of fabric) around a spot that an automatic pass flagged as a possible defect, from a children\'s garment lying flat. ' +
     'Decide what is at or near the center. verdict "defect": a real manufacturing defect (hole, snag/pull, stain or discoloration, loose thread attached to a seam or hanging from the fabric, broken/skipped/double stitching, puckering, unfinished edge). ' +
     'verdict "lint": a removable surface fiber, dust or fluff lying LOOSE on the fabric, not attached to it. A sewing thread end that comes out of a seam, a hem or the knit — even a short one, even in the fabric\'s own color — is "defect" with type "loose_thread", not lint. verdict "texture": normal fabric texture/heather, a printed design, a wrinkle or a shadow. verdict "unsure": you cannot tell at this magnification. ' +
@@ -312,8 +312,12 @@ export async function inspect(img, opts) {
         const b64 = await img.jpeg(paint ? { ...abs, keep: focus.has, fill: FILL, quality: JQ } : { ...abs, quality: JQ })   // table painted out: the model only sees fabric
         // high-recall prompt by default since Oct 28: on two 12 MP captures the strict prompt returned 0 candidates (low and medium effort) while
         // the recall prompt surfaced the confirmed stain and the verify step dropped the rest; opts.tilePrompt === 'strict' keeps the old one for A/B
-        const r = await spark(api, opts.tilePrompt === 'strict' ? PROMPTS.tile : PROMPTS.tileRecall, [b64], opts.tileEffort || 'low')   // minimal was faster but missed a known hole 1 run in 3
-        acct(r.usage)
+        // opts.tilePasses > 1: the same tile is asked again (independent samples) — the tile pass is stochastic, a spot missed once is often seen the second time;
+        // duplicates merge below (mergeCandidates), a spot seen twice counts as two hits
+        const passes = Math.max(1, Math.min(3, opts.tilePasses || 1))
+        const rs = await Promise.all(Array.from({ length: passes }, () => spark(api, opts.tilePrompt === 'strict' ? PROMPTS.tile : PROMPTS.tileRecall, [b64], opts.tileEffort || 'low')))   // minimal was faster but missed a known hole 1 run in 3
+        const r = { usage: rs.reduce((a, x) => ({ input_tokens: (a.input_tokens || 0) + ((x.usage || {}).input_tokens || 0), output_tokens: (a.output_tokens || 0) + ((x.usage || {}).output_tokens || 0) }), {}), json: { defects: rs.flatMap((x) => ((x.json && x.json.defects) || [])) }, calls: passes }
+        acct(r.usage); usage.calls += passes - 1
         const defects = ((r.json && r.json.defects) || []).map(d => ({ ...gridToPx(d.x, d.y, abs), type: String(d.type || 'other'), confidence: clamp(+d.confidence || 0, 0, 1), why: d.why || '' }))
         progress('tile', { i, n: tiles.length, defects: defects.length })
         return { tile: abs, defects }
