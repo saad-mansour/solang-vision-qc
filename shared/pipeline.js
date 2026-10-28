@@ -62,7 +62,8 @@ export const PROMPTS = {
   // 8) embroidery / print close-up (one design per call, magnified up to 3×): the flaws that hide inside decorations
   decor: 'You are a strict garment quality inspector. This is a magnified close-up of ONE embroidered or printed design on a children\'s garment lying flat (the design fills the image, with some fabric around it). ' +
     'Inspect the design itself and its edges. Embroidery: loose or hanging thread ends and tails, skipped, broken, doubled or uneven stitches, gaps in outlines, puckered fabric around it. Print: cracked, peeled, smeared, faded or missing parts, ink or colour outside the outline, misaligned layers, dirt on the print. ' +
-    'Ignore the intended shape and colours of the design, fabric texture, wrinkles, shadows and the image edges. Report only what a buyer would see as a flaw. ' +
+    'Embroidered cartoon designs have INTENDED strokes that stick out of the outline — hair tufts, whiskers, eyelashes, ear lines, letter serifs: these are satin-stitched, as thick and regular as the outline, and are NOT defects. A defect thread is different: thin, single, irregular, frayed or curling, clearly not a stitched stroke. ' +
+    'Ignore the intended shape and colours of the design, fabric texture, wrinkles, shadows and the image edges. Report only what a buyer would see as a flaw; when in doubt about a stroke, do not report it. ' +
     'Answer ONLY JSON: {"defects":[{"type":"loose_thread|stitching|print|hole|stain","x":0-1000,"y":0-1000,"confidence":0-1,"why":"short"}]}. Coordinates are on a 0-1000 grid of THIS image, (0,0) top-left. If nothing, {"defects":[]}.',
   verify: 'You are a strict garment quality inspector. This is a 2x magnified crop (about 5x5 cm of fabric) around a spot that an automatic pass flagged as a possible defect, from a children\'s garment lying flat. ' +
     'Decide what is at or near the center. verdict "defect": a real manufacturing defect (hole, snag/pull, stain or discoloration, loose thread attached to a seam or hanging from the fabric, broken/skipped/double stitching, puckering, unfinished edge). ' +
@@ -406,6 +407,11 @@ export async function inspect(img, opts) {
         const sel = kept.slice(0, opts.decorMax || 4)
         decor = { found: kept.length, sent: sel.length, boxes: sel.map(b => ({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1) })) }
         progress('decor', { count: sel.length })
+        // the inspector's earlier verdicts on this product ride along here too: on #44 four of five close-up findings were intended
+        // strokes of the embroidery that the inspector rejected — those crops are exactly the «not a defect» references the next run needs
+        const dex = sel.length ? await resolveExamples(opts.examples) : []
+        const dRefText = dex.length ? PROMPTS.verifyRefs(dex.length) + dex.map((e, i) => `Image ${i + 1}: ${e.label === 'defect' ? 'DEFECT' : 'NOT A DEFECT'}${e.type ? ' (' + e.type + ')' : ''}`).join('; ') + '. ' : ''
+        const dRefImgs = dex.map(e => e.b64)
         await mapLimit(sel, 4, async (b) => {
           checkAbort()
           const m = 0.15 * Math.max(b.x2 - b.x1, b.y2 - b.y1)
@@ -416,7 +422,7 @@ export async function inspect(img, opts) {
             const b64 = await img.jpeg({ ...abs, resize: { w: Math.round(abs.w * up), h: Math.round(abs.h * up) }, quality: JQ })
             // opts.decorPasses (default 1): independent looks at the same design; opts.decorEffort (default 'low')
             const dp = Math.max(1, Math.min(3, opts.decorPasses || 1))
-            const rs = await Promise.all(Array.from({ length: dp }, () => spark(api, PROMPTS.decor, [b64], opts.decorEffort || 'low')))
+            const rs = await Promise.all(Array.from({ length: dp }, () => spark(api, dRefText + PROMPTS.decor, [...dRefImgs, b64], opts.decorEffort || 'low')))
             rs.forEach((x) => acct(x.usage))
             const r = { json: { defects: rs.flatMap((x) => ((x.json && x.json.defects) || [])) } }
             for (const d of ((r.json && r.json.defects) || [])) {
@@ -426,6 +432,9 @@ export async function inspect(img, opts) {
             }
           } catch (e) { warn('decor', e) }
         })
+        // two looks (and neighbouring designs) report the same spot twice: keep the most confident within 60 px
+        decorFindings.sort((a, b) => b.confidence - a.confidence)
+        for (let i = decorFindings.length - 1; i > 0; i--) if (decorFindings.some((o, j) => j < i && Math.hypot(o.x - decorFindings[i].x, o.y - decorFindings[i].y) < 60)) decorFindings.splice(i, 1)
       } catch (e) { warn('decor', e) }
       stageDone('decor', tD)
     }
