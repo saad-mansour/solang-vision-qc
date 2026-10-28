@@ -31,6 +31,7 @@ const DEV = ['localhost', '127.0.0.1'].includes(location.hostname)   // dev-only
 const REVIEW_POLL_MS = 3000, CAMERA_NEXT_MS = 4000
 const LINK_STATE_MS = 2000, PEER_TTL_MS = 7000, ACK_WAIT_MS = 4000   // phone ⇄ tablet link: state every 2 s, a peer silent for 7 s is gone, a shot request waits 4 s for its ack
 const LIVE_RETRY_MS = 8000, LIVE_GRACE_MS = 5000                      // the tablet asks for the live view again when no frame arrived within 8 s; a stall shorter than 5 s keeps the last frame
+const LIVE_ON_MS = 90000                                               // «📡 شوف الكاميرا» keeps the live view for 90 s (another tap extends it); the shot closes it
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const BIG_PHOTO = 30 * 1024 * 1024           // JPEG originals are uploaded as-is below this (a 24 MP phone JPEG is 5–7 MB); only non-JPEG picks are re-encoded
 
@@ -53,6 +54,7 @@ const S = {
   peers: new Map(), twinSeen: 0,                                                                                       // review: every camera page heard (by boot); camera: another camera page on this station
   live: null, liveBig: false, liveLostAt: 0, liveWasLive: false, peerBoot: null, boot: Math.random().toString(36).slice(2),   // live view (live.js); boot = this page load's identity
   liveFrozenAt: 0,                                                                                                     // the live tile shows the frozen shot while the phone inspects
+  liveWanted: false, liveUntil: 0,                                                                                     // the live view is on demand: «📡» opens it for LIVE_ON_MS, a shot closes it
   seenReq: new Set(), lastRemoteShot: 0,                                                                              // remote shots: no replays, one per 6 s
   noGarment: false, framing: null,                                                                                    // focus / framing of the current run
 }
@@ -143,6 +145,7 @@ function wire() {
   $('btnNew').addEventListener('click', newPiece)
   $('btnBack').addEventListener('click', newPiece)
   $('btnRemote').addEventListener('click', requestRemoteCapture)
+  $('btnLive').addEventListener('click', toggleLive)
   $('btnCamStart').addEventListener('click', () => startCamera())
   $('btnMore').addEventListener('click', () => { $('moreRow').hidden = !$('moreRow').hidden })
   $('btnNet').addEventListener('click', checkConnection)
@@ -524,10 +527,18 @@ function pickType(type) {
 
 // ── cards ────────────────────────────────────────────────────────────────────
 function renderAll() { renderOverlay(); renderCards(); updateSaveEnabled() }
+// the decision buttons judge the WHOLE piece; this line above them says what the per-spot verdicts add up to
+function renderDecSummary() {
+  const s = $('decSummary'), n = S.findings.length
+  if (!n || !(S.img || S.reviewId)) { s.textContent = ''; return }
+  const c = S.findings.filter((f) => f.verdict === 'confirmed' || f.verdict === 'added').length, r = S.findings.filter((f) => f.verdict === 'rejected').length
+  s.textContent = t('القرار تحت للقطعة كلها · النقاط: ✓ {c} عيب مؤكد · ✗ {r} مش عيب · {o} بلا حكم', { c, r, o: n - c - r })
+}
 
 function renderCards() {
   const box = $('findings'); clear(box); box.classList.toggle('locked', !!S.job || S.reviewLocked || S.reviewBusy)   // frozen as soon as a save job exists (busy, failed or done)
   $('findingsCount').textContent = S.findings.length ? String(S.findings.length) : ''
+  renderDecSummary()
   if (S.view === 'camera') { box.appendChild(el('div', 'empty', t('حطّ القطعة تحت الكاميرا وشيل إيديك — أو اختار صورة من الجهاز'))); return }
   if (S.view === 'history') return
   if (!S.findings.length) {
@@ -888,7 +899,7 @@ function onLinkMessage(event, p) {
   if (event === 'ack' && S.capReq && p.req === S.capReq.req) {
     clearTimeout(S.capReq.timer); S.capReq = null
     toast(p.ok ? t('📷 الموبايل عم يصوّر…') : t('الموبايل ما صوّر: ') + (p.reason || '')); renderLink()
-    if (p.ok) freezeLive()                                     // the moving feed is confusing while the phone inspects: hold the shot instead
+    if (p.ok) { freezeLive(); S.liveWanted = false }           // hold the shot instead of the moving feed, and stop the stream: the phone's Wi-Fi now carries the uploads
   } else if (event === 'saved') reviewTick()
 }
 // The tablet may hear several camera pages on one station (an old tab left open, the home-screen copy, a second phone): they alternate every
@@ -953,6 +964,11 @@ function freezeLive() {
   c.hidden = false; S.liveFrozenAt = Date.now(); renderLive()
 }
 function unfreezeLive() { if (!S.liveFrozenAt) return; S.liveFrozenAt = 0; $('liveStill').hidden = true; renderLive() }
+// «📡 شوف الكاميرا»: the live view is on demand — a tap opens it for LIVE_ON_MS (another tap while open closes it); the shot closes it too
+function toggleLive() {
+  if (S.liveWanted) { S.liveWanted = false; S.liveUntil = 0 } else { S.liveWanted = true; S.liveUntil = Date.now() + LIVE_ON_MS }
+  maintainLive(); renderLive()
+}
 
 // the tablet keeps a live view while the phone has a working camera and this page is visible; drops it otherwise
 function maintainLive() {
@@ -962,7 +978,8 @@ function maintainLive() {
     const idleFor = alive && (S.peer.state === 'idle' || S.peer.state === 'nocam') && !S.capReq
     if (Date.now() - S.liveFrozenAt > 120000 || (idleFor && Date.now() - S.liveFrozenAt > 8000) || !alive) unfreezeLive()
   }
-  const can = alive && S.peer.state !== 'nocam' && document.visibilityState === 'visible'   // a signaling blip (link down for a moment) does not kill a running stream
+  if (S.liveWanted && Date.now() > S.liveUntil) S.liveWanted = false                      // the 90 s window ran out
+  const can = S.liveWanted && alive && S.peer.state !== 'nocam' && document.visibilityState === 'visible'   // a signaling blip (link down for a moment) does not kill a running stream
   if (!can) { if (S.live.connecting() || S.live.live() || S.live.askedAt()) S.live.close(); S.liveLostAt = 0; S.liveWasLive = false; renderLive(); return }
   const now = Date.now()
   if (S.live.live()) { S.liveLostAt = 0; S.liveWasLive = true }
@@ -978,7 +995,8 @@ function renderLive() {
   const w = $('liveWrap'), reason = S.live.reason()
   const live = S.live.live() || (S.liveWasLive && !!S.liveLostAt && Date.now() - S.liveLostAt < LIVE_GRACE_MS && S.live.connecting())   // inside the grace window the last frame stays up (only once frames had arrived)
   const frozen = !!S.liveFrozenAt
-  const show = frozen || live || S.live.connecting() || !!reason
+  $('btnLive').textContent = S.liveWanted ? t('⏹ سكّر البث') : t('📡 شوف الكاميرا')
+  const show = frozen || (S.liveWanted && (live || S.live.connecting() || !!reason))
   w.hidden = !show; if (!show) return
   w.classList.toggle('live', live); w.classList.toggle('frozen', frozen); w.classList.toggle('small', !!S.reviewId && !S.liveBig)
   const tl = S.live.timeline ? S.live.timeline() : null, s = tl ? Math.round(tl.since) : 0
@@ -1008,6 +1026,7 @@ function renderLink() {
   if (linkCode()) txt += ' 🔑'; else if (alive && S.peer.code) txt += t(' · الموبايل بدو رمز ربط — كبسي هون لتكتبيه')
   if (alive && S.peers.size > 1) txt += t(' · ⚠ في {n} صفحات كاميرا على هالمحطة — سكّري الزيادة', { n: S.peers.size })
   $('linkText').textContent = txt; $('linkBar').className = 'linkBar ' + cls; $('btnRemote').disabled = !on
+  $('btnLive').disabled = !alive || st === 'nocam' || !(S.live && S.live.supported())
 }
 
 // ── ?mode=review: the inspector's screen ─────────────────────────────────────

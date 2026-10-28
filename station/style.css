@@ -157,6 +157,8 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; direction: ltr; 
 /* 5. decision bar */
 .decision { position: sticky; bottom: 0; z-index: 4; margin-top: 10px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 -4px 16px rgba(0,0,0,.08); }
 .decision .row + .row { margin-top: 8px; }
+.decSummary { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.decSummary:empty { display: none; }
 .decRow .btn { flex: 1 1 100px; }
 .btn.dec.active[data-dec=pass] { background: var(--green); color: #fff; border-color: var(--green); }
 .btn.dec.active[data-dec=repair] { background: var(--amber); color: #fff; border-color: var(--amber); }

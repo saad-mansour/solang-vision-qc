@@ -83,6 +83,8 @@
       <div id="linkBar" class="linkBar off" hidden>
         <span id="linkText">🔌 عم وصل…</span>
         <button type="button" id="btnRemote" class="btn primary big" disabled>📸 افحص القطعة يلي تحت الكاميرا</button>
+        <!-- the live view is on demand (Saad, Oct 28): it costs phone battery and Wi-Fi while the uploads run — a tap opens it for 90 s, a shot closes it -->
+        <button type="button" id="btnLive" class="btn small" disabled>📡 شوف الكاميرا</button>
         <!-- live view of the phone camera (WebRTC, same Wi-Fi only — station/live.js); small tile while a piece is open, tap to enlarge -->
         <div id="liveWrap" class="liveWrap" hidden>
           <video id="liveView" autoplay muted playsinline></video>
@@ -117,6 +119,8 @@
     <div class="head"><span>النقاط</span><span id="findingsCount" class="count"></span></div>
     <div id="findings" class="cards"></div>
     <div id="decisionBar" class="decision" hidden>
+      <!-- the decision is for the WHOLE piece; the ✓ / ✗ on the cards are per spot — this line says both -->
+      <div id="decSummary" class="decSummary"></div>
       <div class="row decRow">
         <button type="button" class="btn dec" data-dec="pass">✅ سليمة</button>
         <button type="button" class="btn dec" data-dec="repair">🔧 تصليح</button>

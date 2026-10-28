@@ -184,6 +184,8 @@ export const EN = {
   'الموبايل ما ردّ — تأكدي إنو صفحة الكاميرا مفتوحة عليه': 'The phone did not answer — make sure the camera page is open on it',
   'رمز الربط مش مطابق': 'Pairing code mismatch',
   '📡 مباشر من الموبايل': '📡 Live from the phone', ' — كبسي للتكبير': ' — tap to enlarge',
+  '📡 شوف الكاميرا': '📡 Show the camera', '⏹ سكّر البث': '⏹ Stop the feed',
+  'القرار تحت للقطعة كلها · النقاط: ✓ {c} عيب مؤكد · ✗ {r} مش عيب · {o} بلا حكم': 'The decision below is for the whole piece · spots: ✓ {c} confirmed · ✗ {r} not defects · {o} undecided',
   '🔌 عم وصل بشاشة المراجعة…': '🔌 Connecting to the review screen…',
   '🧐 شاشة المراجعة متصلة{by} — فيها تطلب الفحص من عندها': '🧐 Review screen connected{by} — it can trigger the inspection',
   '🧐 شاشة المراجعة مش مفتوحة — افتح الرابط عالتابلت واختار «تابلت المفتشة»': '🧐 Review screen not open — open the link on the tablet and choose «Inspector\'s tablet»',
