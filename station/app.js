@@ -50,6 +50,7 @@ const S = {
   camStarting: false, wakeLock: null,
   reviewId: null, reviewDate: null, reviewBusy: false, reviewLocked: false, reviewTimer: null, lastPending: 0,   // ?mode=review
   link: null, linkUp: false, peer: null, peerSeen: 0, capReq: null, lastSavedId: null, linkTimer: null,              // phone ⇄ tablet link (link.js)
+  peers: new Map(), twinSeen: 0,                                                                                       // review: every camera page heard (by boot); camera: another camera page on this station
   live: null, liveBig: false, liveLostAt: 0, liveWasLive: false, peerBoot: null, boot: Math.random().toString(36).slice(2),   // live view (live.js); boot = this page load's identity
   seenReq: new Set(), lastRemoteShot: 0,                                                                              // remote shots: no replays, one per 6 s
   noGarment: false, framing: null,                                                                                    // focus / framing of the current run
@@ -859,7 +860,7 @@ function startLink() {
   } else S.live = makeSender({ send, getStream: () => S.cam && S.cam.stream, onState: () => renderLink() })
   $('linkText').title = $('camLink').title = t('كبسة: رمز الربط بين الجهازين')
   $('linkText').addEventListener('click', setLinkCode); $('camLink').addEventListener('click', setLinkCode)
-  S.linkTimer = setInterval(() => { sendState(); renderLink(); maintainLive() }, LINK_STATE_MS)
+  S.linkTimer = setInterval(() => { sendState(); renderLink(); maintainLive(); renderTwin() }, LINK_STATE_MS)
   renderLink()
 }
 function camState() { return (S.running || S.capturing) ? 'running' : (S.job && S.job.busy) ? 'uploading' : S.camStarting ? 'starting' : !S.cam ? 'nocam' : 'idle' }   // a file-input run on a camera-less device still reads «running»
@@ -872,9 +873,9 @@ function sendState() {
 function onLinkMessage(event, p) {
   if (event.startsWith('rtc-')) { onRtc(event, p); return }
   if (event === 'state') {
+    if (p.role === MODE && p.boot && p.boot !== S.boot) { S.twinSeen = Date.now(); renderTwin(); return }   // another page with OUR role on this station (an old tab, a home-screen copy, a second phone)
     if (p.role && p.role !== MODE) {
-      if (MODE === 'review' && p.boot && S.peerBoot && p.boot !== S.peerBoot && S.live) S.live.close()   // the phone page reloaded: its old stream is gone, ask again
-      if (p.boot) S.peerBoot = p.boot
+      if (MODE === 'review') { pickPeer(p); return }
       S.peer = p; S.peerSeen = Date.now(); renderLink()
     }
     return
@@ -886,6 +887,31 @@ function onLinkMessage(event, p) {
     toast(p.ok ? t('📷 الموبايل عم يصوّر…') : t('الموبايل ما صوّر: ') + (p.reason || '')); renderLink()
   } else if (event === 'saved') reviewTick()
 }
+// The tablet may hear several camera pages on one station (an old tab left open, the home-screen copy, a second phone): they alternate every
+// second and the status line and the live view flap between them. Keep ONE phone — the current one while it is fresh, otherwise the one in
+// the best state — and say how many there are so the extra pages get closed.
+const PEER_RANK = { running: 4, uploading: 3, idle: 3, starting: 2, nocam: 1 }
+function pickPeer(p) {
+  const now = Date.now()
+  if (p.boot) S.peers.set(p.boot, { p, seen: now }); else { S.peer = p; S.peerSeen = now; renderLink(); return }   // a page without boot (old build): as before
+  for (const [b, v] of S.peers) if (now - v.seen > PEER_TTL_MS) S.peers.delete(b)
+  const cur = S.peerBoot ? S.peers.get(S.peerBoot) : null, fresh = cur && now - cur.seen <= LINK_STATE_MS * 1.5
+  let best = fresh ? cur : null
+  for (const v of S.peers.values()) if (!best || (PEER_RANK[v.p.state] || 0) > (PEER_RANK[best.p.state] || 0)) best = v
+  if (best) {
+    if (S.peerBoot && best.p.boot !== S.peerBoot && S.live) S.live.close()     // the phone page changed (reload / another phone): its old stream is gone, ask again
+    S.peerBoot = best.p.boot; S.peer = best.p; S.peerSeen = best.seen
+  }
+  renderLink()
+}
+// camera page: another camera page is talking on this station — the tablet would flap between the two
+function renderTwin() {
+  if (MODE !== 'camera') return
+  const m = $('camMsg'), twin = Date.now() - S.twinSeen < PEER_TTL_MS
+  if (twin) { m.textContent = t('⚠ في صفحة كاميرا تانية مفتوحة على نفس المحطة (تبويب قديم أو نسخة الشاشة الرئيسية) — سكّرها، وإلا التابلت بيلخبط بيناتهن'); m.hidden = false }
+  else if (m.textContent.startsWith('⚠')) m.hidden = true
+}
+
 // the tablet asked for a shot: answer at once, revive the camera if it had stopped, leave the previous piece (its upload goes on detached), shoot
 async function remoteCapture(p) {
   const reply = (ok, reason) => { if (S.link) S.link.send('ack', { req: p.req, ok, reason: reason || null }) }
@@ -961,6 +987,7 @@ function renderLink() {
   else if (st === 'nocam') { txt = t('📷 الموبايل متصل{dev} بس كاميرتو واقفة — الكبسة بتجرّب تشغيلها', { dev }); cls = 'busy'; on = true }
   else { txt = t('📷 الموبايل جاهز{dev} — حطّي القطعة واكبسي', { dev }) + (S.peer.err ? t(' · ⚠ آخر فحص: ') + S.peer.err : ''); cls = S.peer.err ? 'busy' : 'ok'; on = true }
   if (linkCode()) txt += ' 🔑'; else if (alive && S.peer.code) txt += t(' · الموبايل بدو رمز ربط — كبسي هون لتكتبيه')
+  if (alive && S.peers.size > 1) txt += t(' · ⚠ في {n} صفحات كاميرا على هالمحطة — سكّري الزيادة', { n: S.peers.size })
   $('linkText').textContent = txt; $('linkBar').className = 'linkBar ' + cls; $('btnRemote').disabled = !on
 }
 

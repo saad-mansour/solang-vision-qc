@@ -248,4 +248,6 @@ export const EN = {
   '📶 عم قيس سرعة الرفع…': '📶 Measuring upload speed…', 'ضعيف': 'weak', 'متوسط': 'medium', 'منيح': 'good',
   '📶 رفع {mbps} ميغابت/ث ({grade}) · ردّ {rtt} ms — الرفع لحالو حوالي {s} ث للقطعة': '📶 Upload {mbps} Mbit/s ({grade}) · round trip {rtt} ms — uploads alone take about {s} s per piece',
   '📶 ما قدرت قيس: ': '📶 Could not measure: ', '✓ انحفظ — عم رفع الصورة الكاملة…': '✓ Saved — uploading the full photo…',
+  ' · ⚠ في {n} صفحات كاميرا على هالمحطة — سكّري الزيادة': ' · ⚠ {n} camera pages on this station — close the extra ones',
+  '⚠ في صفحة كاميرا تانية مفتوحة على نفس المحطة (تبويب قديم أو نسخة الشاشة الرئيسية) — سكّرها، وإلا التابلت بيلخبط بيناتهن': '⚠ Another camera page is open on this station (an old tab or the home-screen copy) — close it, or the tablet flips between the two',
 }
