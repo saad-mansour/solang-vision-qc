@@ -21,6 +21,7 @@ const TEXT = {
     notes: [
       'After this card a setup screen asks what this device is — choose «One device» to try it on your own.',
       'In the factory this runs on two devices: a phone fixed above the table and the inspector\'s tablet (see the README).',
+      'Sharpest results: «⋯» → «📷 Full-quality shot» uses the phone\'s own camera app (24 MP on recent iPhones) instead of the 12 MP browser stream.',
       'Every inspection calls Meta\'s API on the developer\'s account — please keep tries reasonable.',
     ],
     start: 'Start', other: 'العربية بدلاً من ذلك', lang: 'Language',
@@ -36,6 +37,7 @@ const TEXT = {
     notes: [
       'بعد هالكرت بتطلع شاشة الإعداد وبتسأل شو هاد الجهاز — اختار «جهاز واحد» للتجربة لحالك.',
       'بالمصنع بيشتغل على جهازين: موبايل مثبّت فوق الطاولة وتابلت المفتشة (التفاصيل بالـREADME).',
+      'أدق نتيجة: «⋯» ← «📷 لقطة بجودة الكاميرا الأصلية» بتستعمل تطبيق كاميرا الموبايل نفسو (24 ميغابكسل بالآيفونات الجديدة) بدل بث المتصفح (12).',
       'كل فحص بيكلّم API تبع Meta على حساب المطوّر — خلّي التجارب معقولة.',
     ],
     start: 'يلا نبلّش', other: 'English instead', lang: 'اللغة',

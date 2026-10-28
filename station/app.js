@@ -130,6 +130,9 @@ function wire() {
   $('autoCap').addEventListener('change', () => { S.autoCapture = $('autoCap').checked })
   $('btnShoot').addEventListener('click', () => captureFromCamera(t('يدوي')))
   $('btnFile').addEventListener('click', () => $('fileInput').click())
+  // the phone's own camera app: full photo-mode quality (24 MP on recent iPhones vs the 12 MP browser stream) — a tap on the phone, then the usual run
+  $('btnHiRes').addEventListener('click', () => $('hiresInput').click())
+  $('hiresInput').addEventListener('change', () => { const f = $('hiresInput').files && $('hiresInput').files[0]; $('hiresInput').value = ''; if (f) runInspection(f, t('كاميرا أصلية')) })
   $('fileInput').addEventListener('change', () => { const f = $('fileInput').files && $('fileInput').files[0]; $('fileInput').value = ''; if (f) runInspection(f, t('ملف')) })
   $('btnFlip').addEventListener('click', () => { S.facing = S.facing === 'environment' ? 'user' : 'environment'; startCamera(); renderBgStatus() })
   $('btnBg').addEventListener('click', captureBackground)

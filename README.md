@@ -297,6 +297,12 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
   a frame guide, «📶 connection check» (`/ping`) and a live-view timeline on the tablet, lighter uploads (JPEG 0.85, 2+2
   references at 320 px) and **early release**: each piece reaches the review screen after the preview, crops and rows
   (seconds), the full photo and the annotated copy follow in the background.
+- **Oct 28 (evening):** a stain the station missed twice at 12 MP was found from the same garment photographed with the
+  phone's camera app (24 MP). Re-running that photo through the harness: 24 MP finds it, a 12 MP downscale does not,
+  and smaller tiles (850 px) do not bring it back — capture resolution, not tiling, is the limit (the iPhone browser
+  stream tops out at 12 MP video frames; the camera app shoots 24 MP photo mode). Added «📷 Full-quality shot» under
+  «⋯» (`<input capture="environment">`: the phone's own camera app, one tap on the phone, then the usual run), the review
+  tablet holds the confirmed shot while the phone inspects, and keeps one phone when several camera pages share a station.
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.
 
