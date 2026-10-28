@@ -285,7 +285,7 @@ async function runInspection(blob, sourceLabel) {
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, requireGarment: true, lang: LANG })
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, requireGarment: true, lang: LANG, tilePasses: 2 })   // every tile asked twice (Saad, Oct 28: «it found something I had not seen» — worth +3 s)
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress(t('انلغى الفحص')); return }

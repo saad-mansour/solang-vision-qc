@@ -223,7 +223,8 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   2 defect + 2 not_defect at 320 px.
 - **Tile pass**: `opts.tilePrompt` `'recall'` (default since Oct 28: over-report, up to 5 spots per tile, verify decides) | `'strict'` (the old
   prompt, for A/B); `opts.tileEffort` `'low'` (default) | `'medium'`; `opts.tilePasses` 1 (default) … 3 = independent samples of the same
-  tile, merged by `mergeCandidates` (a spot seen twice has `hits` 2), `usage.calls` counts every pass. The station passes none of these (defaults). Capture note: on iPhone every in-browser
+  tile, merged by `mergeCandidates` (a spot seen twice has `hits` 2), `usage.calls` counts every pass. The station passes `tilePasses: 2`
+  (Saad's call on Oct 28 after it surfaced a thread loop he had not seen) and leaves the rest at the defaults. Capture note: on iPhone every in-browser
   camera path (stream and `<input capture>`) yields 12 MP; a Camera-app photo picked with 📁 is 24 MP — the page says so under «⋯».
 
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)

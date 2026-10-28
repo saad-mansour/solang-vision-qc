@@ -312,8 +312,8 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
   prompt now treats a thread end coming out of a seam as a defect, not lint. The first live run with it caught the pulled
   thread but surfaced only one candidate and missed the stain, so the prompt now asks for *up to 5 spots, most suspicious
   first*: on that capture 2 of 2 harness runs then found both (stain amber ~65–70 %, thread red 80–85 %). `opts.tilePasses`
-  (2 = ask every tile twice, duplicates merge into hits) is there for a slower, more thorough mode (+40 % tokens, +3 s;
-  it also surfaced a second, black thread loop both times). Harness flags `--tile`, `--overlap`, `--tile-effort`,
+  (2 = ask every tile twice, duplicates merge into hits) adds +40 % tokens and +3 s and surfaced a second, black thread
+  loop both times — the station now runs with it, by the factory's choice («the first time it found something I had not seen»). Harness flags `--tile`, `--overlap`, `--tile-effort`,
   `--strict`, `--passes` for such A/Bs.
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.
