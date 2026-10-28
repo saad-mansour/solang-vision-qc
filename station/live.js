@@ -90,7 +90,7 @@ export function makeSender({ send, getStream, onState }) {
 
 // ── tablet side: asks, answers, shows. live() is true only while frames are actually arriving.
 export function makeViewer({ send, video, onState }) {
-  let pc = null, req = null, askedAt = 0, pending = [], track = null, lastReason = '', fails = 0
+  let pc = null, req = null, askedAt = 0, pending = [], track = null, lastReason = '', fails = 0, tl = {}   // tl: when the offer / answer / connection / first frame happened
   const state = (s) => { try { onState && onState(s) } catch (e) { console.warn('live state handler failed', e) } }
   function teardown() {
     if (pc) { try { pc.close() } catch (e) { /* ignore */ } }
@@ -102,25 +102,28 @@ export function makeViewer({ send, video, onState }) {
     ask() {
       if (!supported()) return
       if (askedAt) fails++                       // every ask after the first one means the previous attempt never showed a frame
-      teardown(); req = newId(); askedAt = Date.now(); send('rtc-want', { req }); state('asked')
+      teardown(); req = newId(); askedAt = Date.now(); tl = {}; send('rtc-want', { req }); state('asked')
     },
     askedAt: () => askedAt,
+    // seconds since the ask, and at which second the offer / answer / connection / first frame arrived (null = not yet)
+    timeline: () => ({ since: askedAt ? (Date.now() - askedAt) / 1000 : 0, offer: tl.offer ? (tl.offer - askedAt) / 1000 : null, answer: tl.answer ? (tl.answer - askedAt) / 1000 : null, connected: tl.connected ? (tl.connected - askedAt) / 1000 : null, track: tl.track ? (tl.track - askedAt) / 1000 : null }),
     // a specific failure, or — after a silent attempt — the one thing that usually fixes it
     reason: () => lastReason || (fails >= 1 ? t('البث ما وصل بعد — الجهازين لازم يكونوا على نفس الواي فاي') : ''),
     async onOffer(r, sdp) {
       if (!r || r !== req || !sdp) return
+      tl.offer = Date.now()
       teardown()
       const mine = new RTCPeerConnection(RTC_CONFIG); pc = mine
-      mine.ontrack = (e) => { if (pc !== mine) return; track = e.track; video.srcObject = (e.streams && e.streams[0]) || new MediaStream([e.track]); video.play().catch(() => {}); fails = 0; lastReason = ''; state('track') }
+      mine.ontrack = (e) => { if (pc !== mine) return; track = e.track; video.srcObject = (e.streams && e.streams[0]) || new MediaStream([e.track]); video.play().catch(() => {}); fails = 0; lastReason = ''; tl.track = Date.now(); state('track') }
       mine.onicecandidate = (e) => { if (e.candidate && pc === mine && privateCandidate(e.candidate)) send('rtc-ice', { req: r, cand: e.candidate.toJSON() }) }
-      mine.onconnectionstatechange = () => { if (pc !== mine) return; state(mine.connectionState); if (mine.connectionState === 'failed') { lastReason = t('الشبكة ما سمحت بالاتصال المباشر بين الجهازين (واي فاي منفصل أو عزل بين الأجهزة)'); teardown() } }
+      mine.onconnectionstatechange = () => { if (pc !== mine) return; if (mine.connectionState === 'connected') tl.connected = Date.now(); state(mine.connectionState); if (mine.connectionState === 'failed') { lastReason = t('الشبكة ما سمحت بالاتصال المباشر بين الجهازين (واي فاي منفصل أو عزل بين الأجهزة)'); teardown() } }
       try {
         await mine.setRemoteDescription(privateSdp(sdp))
         for (const c of pending) { try { await mine.addIceCandidate(c) } catch (e) { /* unreachable candidate */ } }
         pending = []
         await mine.setLocalDescription(await mine.createAnswer())
         if (pc !== mine) return
-        send('rtc-answer', { req: r, sdp: privateSdp(mine.localDescription.toJSON()) })
+        send('rtc-answer', { req: r, sdp: privateSdp(mine.localDescription.toJSON()) }); tl.answer = Date.now()
       } catch (e) { lastReason = t('ما قدرت أفتح البث: ') + ((e && e.message) || e); if (pc === mine) teardown(); state('failed') }
     },
     async onIce(r, cand) {

@@ -200,6 +200,28 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   in that language; `localStorage['vqc_welcomed'] = '1'` ends it. `?welcome=1` and the top-bar «?» reopen the how-to; the top-bar
   «English / عربي» switches the language. `init()` awaits the card before starting the camera, so the permission prompt comes after it.
 
+### §6 additions (Oct 28) — device setup, camera start, connection check, early release
+
+- **Setup screen** `#setup` (`showSetup` / `saveSetup`): role cards `.role[data-role=camera|review|all]`, `#setCode` (pairing code),
+  `#setName`; stored as `vqc_role`, `vqc_link_code`, `vqc_inspector`, then `location.replace()` without `?mode`/`?welcome`.
+  `MODE` = `?mode=` → stored role → `null`; with `null`, `init()` shows the setup screen and starts nothing. ⚙️ `#btnSetup` reopens it.
+- **Camera start** `#camStart` / `#btnCamStart`: shown the first time (`vqc_cam_ok` not set) and after a camera failure (`showCamStart(reason)`,
+  `#moreRow` opened so the file button is reachable); a working camera stores `vqc_cam_ok=1` and later loads start it by themselves.
+  The `.videoWrap` carries `.guide` + `.guideLabel` (frame guide) and `#camLast` (the «sent to review» banner) as overlays.
+- **Controls row** `.ctrl`: `#btnFlip` (round), `#btnShoot` (`.shutter`, icon only, label in `aria-label`), `#autoCap` as a switch, `#btnMore`
+  toggling `#moreRow` (`#btnFile`, `#btnBg` / `#btnBgClear` / `#bgStatus`, `#btnNet` / `#netStatus`). Camera mode hides `#stats` and the name input.
+- **`POST /ping`** (Worker and `dev/serve.mjs`): same-origin only, body ≤ 2 MB, nothing stored → `{ ok, bytes, ms }`. `checkConnection()`
+  uploads 1 MB of random bytes, then one `GET /health`, and writes «📶 رفع N ميغابت/ث (ضعيف/متوسط/منيح) · ردّ N ms — …» into `#netStatus`
+  and `#netStatus2`; grades: < 2 weak, < 8 medium.
+- **Live timeline**: `viewer.timeline()` → `{ since, offer, answer, connected, track }` in seconds since the ask (null = not yet); `renderLive`
+  appends « · N ث: ناطر عرض من الموبايل / العرض وصل، عم يتصل / اتصل، ناطر أول صورة» to the caption while not live.
+- **Early release** (`runSave`): preview → crops → finding rows → example rows → `updateInspection({ photo_path, decision })` (= released:
+  the tablet polls and opens the row; the camera device sends `saved`, shows `#camLast` and moves on) → `photo.jpg` → `annotated.jpg` →
+  `updateInspection({ annotated_path })`. `photo_path` set now means «preview, crops and rows are in place»; `photo.jpg` may land seconds
+  later (the review screen works from `preview.jpg`; the strip shows `preview.jpg` until `annotated.jpg` exists and refreshes on it).
+- **Bytes**: `opts.jpegQuality` (default 0.85) on every image the pipeline sends (`img.jpeg({ quality })` in both adapters); references
+  2 defect + 2 not_defect at 320 px.
+
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)
 
 Supabase Realtime **broadcast** over one WebSocket per device (Phoenix protocol, no library, no table, no SQL). Topic

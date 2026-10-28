@@ -98,8 +98,8 @@ function makeAdapter(bitmap, source) {
 
   return {
     width: W, height: H, source, bitmap,
-    /** crop → base64 JPEG (quality 0.9), no data: prefix — what shared/pipeline.js calls. */
-    jpeg: async (o = {}) => blobToBase64(await encode(o, 0.9)),
+    /** crop → base64 JPEG (quality o.quality, default 0.9), no data: prefix — what shared/pipeline.js calls. */
+    jpeg: async (o = {}) => blobToBase64(await encode(o, o.quality ?? 0.9)),
     /** crop → Blob image/jpeg (default quality 0.92) for uploads and thumbnails. Omit x/y/w/h for the whole photo. */
     blob: (o = {}) => encode(o, o.quality ?? 0.92),
     /** object URL of a downscaled JPEG for display; cached per maxSide, revoked by close(). */

@@ -14,7 +14,7 @@
 // Dependencies are injected so this file has none besides ./focus.js (pure grid helpers):
 //   api.responses(body) → Promise<json>          (Meta Model API /v1/responses, via proxy in the browser)
 //   img.width, img.height                        (photo size after EXIF rotation)
-//   img.jpeg({x,y,w,h, resize, mirror}) → Promise<base64 string without data: prefix>
+//   img.jpeg({x,y,w,h, resize, mirror, quality}) → Promise<base64 string without data: prefix>
 //   samParser (optional) = { parseImageStream, recordsOfKind, decodeMaskToRaster } from @meta-sam/parser — enables mask-based measurement
 //
 // Scheduling: after step 1 the two independent branches run CONCURRENTLY (Promise.all):
@@ -231,6 +231,7 @@ const WHY = {
 
 export async function inspect(img, opts) {
   const WT = WHY[opts && opts.lang === 'en' ? 'en' : 'ar']
+  const JQ = (opts && opts.jpegQuality) || 0.85           // JPEG quality of what goes to the models: ~20 % fewer bytes than 0.9, no defect lost in the 7-photo set
   const t0 = Date.now()
   const { api } = opts
   const progress = opts.onProgress || (() => {})
@@ -253,7 +254,7 @@ export async function inspect(img, opts) {
   const tG = Date.now()
   const samMax = opts.samMaxSide || 1600
   const scale = Math.min(1, samMax / Math.max(W, H))
-  const small = await img.jpeg({ x: 0, y: 0, w: W, h: H, resize: { w: Math.round(W * scale), h: Math.round(H * scale) } })
+  const small = await img.jpeg({ x: 0, y: 0, w: W, h: H, resize: { w: Math.round(W * scale), h: Math.round(H * scale) }, quality: JQ })
   // the parts SAM call needs only this downscaled copy, not the garment region: sent now, it overlaps the garment call (~5 s off branch G)
   const partsSam = g.part ? samRaw(api, g.part, small).then((text) => { usage.sam_calls += 1; return text }) : null
   if (partsSam) partsSam.catch(() => { /* reported as a parts warning when branch G awaits it */ })
@@ -303,7 +304,7 @@ export async function inspect(img, opts) {
       checkAbort()
       const abs = { x: region.x + tl.x, y: region.y + tl.y, w: tl.w, h: tl.h }
       try {
-        const b64 = await img.jpeg(paint ? { ...abs, keep: focus.has, fill: FILL } : abs)   // table painted out: the model only sees fabric
+        const b64 = await img.jpeg(paint ? { ...abs, keep: focus.has, fill: FILL, quality: JQ } : { ...abs, quality: JQ })   // table painted out: the model only sees fabric
         const r = await spark(api, PROMPTS.tile, [b64], 'low')   // minimal was faster but missed a known hole 1 run in 3
         acct(r.usage)
         const defects = ((r.json && r.json.defects) || []).map(d => ({ ...gridToPx(d.x, d.y, abs), type: String(d.type || 'other'), confidence: clamp(+d.confidence || 0, 0, 1), why: d.why || '' }))
@@ -329,7 +330,7 @@ export async function inspect(img, opts) {
       const x = clamp(c.x - win / 2, 0, Math.max(0, W - win)), y = clamp(c.y - win / 2, 0, Math.max(0, H - win))
       const abs = { x: Math.round(x), y: Math.round(y), w: Math.min(win, W), h: Math.min(win, H) }
       try {
-        const b64 = await img.jpeg({ ...abs, resize: { w: 1000, h: Math.round(1000 * abs.h / abs.w) } })
+        const b64 = await img.jpeg({ ...abs, resize: { w: 1000, h: Math.round(1000 * abs.h / abs.w) }, quality: JQ })
         const r = await spark(api, refText + PROMPTS.verify, [...refImgs, b64], 'low')   // the references ride along on both looks
         acct(r.usage)
         let j = r.json || {}
@@ -340,7 +341,7 @@ export async function inspect(img, opts) {
           const w3 = Math.round(win * 0.66)
           const x3 = clamp(c.x - w3 / 2, 0, Math.max(0, W - w3)), y3 = clamp(c.y - w3 / 2, 0, Math.max(0, H - w3))
           const abs3 = { x: Math.round(x3), y: Math.round(y3), w: Math.min(w3, W), h: Math.min(w3, H) }
-          const b3 = await img.jpeg({ ...abs3, resize: { w: 1000, h: Math.round(1000 * abs3.h / abs3.w) } })
+          const b3 = await img.jpeg({ ...abs3, resize: { w: 1000, h: Math.round(1000 * abs3.h / abs3.w) }, quality: JQ })
           const r3 = await spark(api, refText + PROMPTS.verify, [...refImgs, b3], 'low')   // same references: a not_defect example must be able to veto the 3x look too
           acct(r3.usage)
           second = r3.json || {}
@@ -407,7 +408,7 @@ export async function inspect(img, opts) {
             else { const h = Math.max(A.y2 - A.y1, B.y2 - B.y1); A.y2 = A.y1 + h; B.y2 = B.y1 + h; const w = Math.max(A.x2 - A.x1, B.x2 - B.x1); A.x2 = A.x1 + w; B.x1 = B.x2 - w }   // الكفة الخارجية هي المرجع: شمال = x1، يمين = x2
             const clip = b => ({ x1: clamp(b.x1, 0, W - 2), y1: clamp(b.y1, 0, H - 2), x2: clamp(b.x2, 2, W), y2: clamp(b.y2, 2, H) })
             A = clip(A); B = clip(B)
-            const crop = (b, mirror) => img.jpeg({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1), resize: fit(b, 1200), mirror })
+            const crop = (b, mirror) => img.jpeg({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1), resize: fit(b, 1200), mirror, quality: JQ })
             const [a, m] = await Promise.all([crop(A, false), crop(B, true)])
             // مرتين، ولازم الاتنين يقولوا «مختلف» (الحكم الواحد بيتأثر بطريقة الفرد) — الثقة = الأصغر
             const [r1, r2] = await Promise.all([spark(api, PROMPTS.mirror(g.part), [a, m], 'medium'), spark(api, PROMPTS.mirror(g.part), [a, m], 'medium')])
@@ -433,7 +434,7 @@ export async function inspect(img, opts) {
       try {
         const gMax = opts.globalMaxSide || 1600
         const gs = Math.min(1, gMax / Math.max(region.w, region.h))
-        const b64 = await img.jpeg({ ...region, resize: { w: Math.round(region.w * gs), h: Math.round(region.h * gs) } })
+        const b64 = await img.jpeg({ ...region, resize: { w: Math.round(region.w * gs), h: Math.round(region.h * gs) }, quality: JQ })
         const imgs = [b64]
         if (opts.reference) {
           const R = opts.reference

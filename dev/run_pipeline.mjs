@@ -22,7 +22,7 @@ async function adapter(file) {
   const m2 = await sharp(buf).metadata()
   return {
     width: m2.width, height: m2.height, buffer: buf,
-    async jpeg({ x, y, w, h, resize, mirror, keep, fill }) {
+    async jpeg({ x, y, w, h, resize, mirror, keep, fill, quality }) {
       let s = sharp(buf).extract({ left: Math.round(x), top: Math.round(y), width: Math.round(w), height: Math.round(h) })
       if (resize) s = s.resize(Math.round(resize.w), Math.round(resize.h), { kernel: 'lanczos3' })
       if (mirror) s = s.flop()
@@ -36,9 +36,9 @@ async function adapter(file) {
             if (!keep(X, Y)) { const i = (py * info.width + px) * ch; data[i] = f[0]; data[i + 1] = f[1]; data[i + 2] = f[2] }
           }
         }
-        return (await sharp(data, { raw: { width: info.width, height: info.height, channels: ch } }).jpeg({ quality: 90 }).toBuffer()).toString('base64')
+        return (await sharp(data, { raw: { width: info.width, height: info.height, channels: ch } }).jpeg({ quality: Math.round((quality ?? 0.9) * 100) }).toBuffer()).toString('base64')
       }
-      return (await s.jpeg({ quality: 90 }).toBuffer()).toString('base64')
+      return (await s.jpeg({ quality: Math.round((quality ?? 0.9) * 100) }).toBuffer()).toString('base64')
     },
   }
 }

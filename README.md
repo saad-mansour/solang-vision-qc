@@ -236,7 +236,12 @@ whole garment is in frame before shooting (WebRTC, peer to peer, same Wi-Fi only
 The two devices talk over a Supabase Realtime broadcast channel ([`station/link.js`](station/link.js), no table, no SQL)
 and hand the inspection itself over through the demo database — a row is released to the tablet only once its photo,
 preview, crops and finding rows are all uploaded.
-Without `?mode` one device does everything. HTTPS is required for the camera; add the page to the home screen.
+The first open on a device shows a **setup screen**: the role of the device (phone above the table / inspector's
+tablet / one device), the pairing code and a name, stored on the device; `?mode=camera|review|all` still overrides it
+(⚙️ in the top bar reopens the screen). The camera is started by a clear tap the first time (the browser's permission
+prompt follows it) and by itself afterwards. «📶 Connection check» (setup screen and under «⋯») uploads 1 MB to the
+proxy's `/ping` and reports Mbit/s: on a factory Wi-Fi this, not the models, is usually why a piece takes long. HTTPS
+is required for the camera; add the page to the home screen.
 
 ## Safety and privacy
 
@@ -287,6 +292,11 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
 - **Oct 27 (day):** first-visit card (language choice, then a 3-step how-to for trying it with one phone) and a full
   English UI (`?lang=en` or the top-bar button; the Arabic strings stay the source text, `dev/tests/test_i18n.mjs`
   keeps code and dictionary in sync).
+- **Oct 28:** a test on the factory's own Wi-Fi took 56–81 s per piece (every stage 2–4× slower than at home, so bandwidth,
+  not the models) → device setup screen (role, pairing code, name), camera started by a tap, one-row camera controls with
+  a frame guide, «📶 connection check» (`/ping`) and a live-view timeline on the tablet, lighter uploads (JPEG 0.85, 2+2
+  references at 320 px) and **early release**: each piece reaches the review screen after the preview, crops and rows
+  (seconds), the full photo and the annotated copy follow in the background.
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.
 

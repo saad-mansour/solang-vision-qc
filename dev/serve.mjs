@@ -193,6 +193,15 @@ async function proxy(req, res, url) {
 // ---------------------------------------------------------------------------------------------------------------
 // server
 // ---------------------------------------------------------------------------------------------------------------
+// «📶 فحص الاتصال»: same-origin POST of ~1 MB, answered with its size and the server-side time (nothing stored, 2 MB cap)
+function ping(req, res) {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' })
+  if (!sameOrigin(req)) return sendJson(res, 403, { error: 'same origin only' })
+  const max = 2 * 1024 * 1024, t0 = Date.now(); let n = 0
+  req.on('data', (c) => { n += c.length; if (n > max && !res.headersSent) { sendJson(res, 413, { error: 'body too large' }); req.destroy() } })
+  req.on('end', () => { if (!res.headersSent) sendJson(res, 200, { ok: true, bytes: n, ms: Date.now() - t0 }) })
+}
+
 const server = http.createServer((req, res) => {
   const t0 = Date.now()
   let url
@@ -210,6 +219,7 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'OPTIONS') { res.writeHead(204, url.pathname.startsWith('/v1/') ? {} : CORS); return res.end() }   // no CORS for the proxy
   if (url.pathname === '/health') return sendJson(res, 200, { ok: true, mode: 'dev', key: KEY ? 'loaded' : 'missing' })
+  if (url.pathname === '/ping') return void ping(req, res)
   if (url.pathname.startsWith('/v1/')) return void proxy(req, res, url)
   serveStatic(req, res, url).catch(() => sendJson(res, 500, { error: 'server error' }))
 })

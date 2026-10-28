@@ -10,7 +10,8 @@
 //   MAX_BODY_MB    var, default 8     — request body cap (a tile is ~0.4 MB of base64 JPEG, the mirror pair ~1 MB)
 // Also enforced: the request must carry this deployment's own Origin (browsers always send it on POST), the model allow-list,
 // reasoning effort low/medium only, no streaming. The real backstop for a public link is a spend cap on the Meta account.
-// Everything that is not /v1/* or /health is served from the deployed files by env.ASSETS.
+// /ping answers the station's «📶 connection check» (same-origin POST of ~1 MB, nothing stored). Everything that is not /v1/*,
+// /ping or /health is served from the deployed files by env.ASSETS.
 
 const META_BASE = 'https://api.meta.ai/v1'
 const ALLOWED_MODELS = new Set(['muse-spark-1.3', 'muse-spark-1.2', 'sam-3.1'])
@@ -23,6 +24,7 @@ export default {
     const url = new URL(request.url)
     if (url.pathname === '/') return Response.redirect(url.origin + '/station/', 302)
     if (url.pathname === '/health') return json(200, { ok: true, service: 'solang-vision-qc', key: env.META_API_KEY ? 'set' : 'missing' })
+    if (url.pathname === '/ping') return ping(request, url)
     if (url.pathname.startsWith('/v1/')) return proxy(request, env, url)
     return env.ASSETS.fetch(request)
   },
@@ -66,4 +68,15 @@ async function proxy(request, env, url) {
     signal: request.signal,     // the station's Cancel aborts the upstream call too
   })
   return new Response(up.body, { status: up.status, headers: { 'Content-Type': up.headers.get('Content-Type') || 'application/json', 'Cache-Control': 'no-store' } })
+}
+
+// «📶 فحص الاتصال»: the station uploads ~1 MB of random bytes and times it — same-origin POST only, nothing stored, 2 MB cap
+async function ping(request, url) {
+  if (request.method !== 'POST') return json(405, { error: 'method not allowed' })
+  if (request.headers.get('Origin') !== url.origin) return json(403, { error: 'origin not allowed' })
+  const max = 2 * 1024 * 1024
+  if (parseInt(request.headers.get('Content-Length') || '0', 10) > max) return json(413, { error: 'body too large' })
+  const t0 = Date.now(), buf = await request.arrayBuffer()
+  if (buf.byteLength > max) return json(413, { error: 'body too large' })
+  return json(200, { ok: true, bytes: buf.byteLength, ms: Date.now() - t0 })
 }

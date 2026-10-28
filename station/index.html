@@ -21,14 +21,10 @@
   </div>
   <input id="inspector" class="inspector" type="text" placeholder="اسم المفتشة" autocomplete="off" aria-label="اسم المفتشة">
   <div id="stats" class="stats"></div>
-  <nav id="modeNav" class="modeNav" aria-label="وضع الجهاز">
-    <a href="./" data-mode="all">الكل</a>
-    <a href="?mode=camera" data-mode="camera">📷 كاميرا</a>
-    <a href="?mode=review" data-mode="review">🧐 مراجعة</a>
-  </nav>
-  <!-- language (reloads) + the how-to card again (station/welcome.js) -->
+  <!-- language (reloads) · the how-to card again (station/welcome.js) · the device setup screen (role, pairing code, name) -->
   <button type="button" id="btnLang" class="btn small lang">English</button>
   <button type="button" id="btnHelp" class="btn small help" title="كيف أجرّب؟" aria-label="كيف أجرّب؟">?</button>
+  <button type="button" id="btnSetup" class="btn small help" title="إعدادات الجهاز" aria-label="إعدادات الجهاز">⚙️</button>
 </header>
 
 <div id="banner" class="banner" hidden></div>
@@ -39,25 +35,39 @@
 
     <!-- 2. camera panel -->
     <section id="cameraPanel" class="panel">
+      <!-- first time on a device: the camera is asked for by a clear tap, not on page load (vqc_cam_ok remembers a working camera) -->
+      <div id="camStart" class="camStart" hidden>
+        <div class="csIcon">📷</div>
+        <button type="button" id="btnCamStart" class="btn primary big">شغّل الكاميرا</button>
+        <p class="csText">المتصفح رح يسألك تسمح للكاميرا — اختار «السماح».</p>
+        <div id="camStartMsg" class="msg" hidden></div>
+        <div class="csTips">ثبّت الموبايل فوق نص الطاولة · الطاولة فاضية وسادة · الضو ثابت · بعدين من «⋯» صوّر الطاولة فاضية مرة وحدة</div>
+      </div>
       <div class="videoWrap">
         <video id="video" autoplay muted playsinline></video>
         <span id="pill" class="pill">جاهزة</span>
+        <div class="guide"></div>
+        <div class="guideLabel">حطّ القطعة جوّا الإطار وشيل إيديك</div>
+        <div id="camLast" class="camLast" hidden></div>
       </div>
       <div id="camMsg" class="msg" hidden></div>
-      <div id="camLast" class="msg ok" hidden></div>
       <div id="camLink" class="msg" hidden></div>
-      <div class="row">
-        <label class="toggle"><input type="checkbox" id="autoCap" checked> لقطة تلقائية</label>
-        <button type="button" id="btnShoot" class="btn primary">📸 افحص هلق</button>
-        <button type="button" id="btnFile" class="btn">📁 صورة من الجهاز</button>
-        <input type="file" id="fileInput" accept="image/*" hidden>
-        <button type="button" id="btnFlip" class="btn">🔄 كاميرا</button>
+      <!-- one row: flip · the shutter · auto toggle · «⋯» (photo from device, the empty-table photo, the connection check) -->
+      <div class="ctrl">
+        <button type="button" id="btnFlip" class="rbtn" title="🔄 كاميرا" aria-label="🔄 كاميرا">🔄</button>
+        <button type="button" id="btnShoot" class="shutter" title="📸 افحص هلق" aria-label="📸 افحص هلق">📸</button>
+        <label class="switch" title="لقطة تلقائية"><input type="checkbox" id="autoCap" checked><i></i><span>تلقائي</span></label>
+        <button type="button" id="btnMore" class="rbtn" title="المزيد" aria-label="المزيد">⋯</button>
       </div>
-      <!-- optional, once per station: a photo of the empty table, kept on this device — what differs from it is «not table» -->
-      <div class="row bgRow">
+      <div id="moreRow" class="row moreRow" hidden>
+        <button type="button" id="btnFile" class="btn small">📁 صورة من الجهاز</button>
+        <input type="file" id="fileInput" accept="image/*" hidden>
+        <!-- optional, once per station: a photo of the empty table, kept on this device — what differs from it is «not table» -->
         <button type="button" id="btnBg" class="btn small">🧹 صوّر الطاولة فاضية</button>
-        <span id="bgStatus"></span>
         <button type="button" id="btnBgClear" class="btn small" hidden>🗑</button>
+        <span id="bgStatus" class="bgStatus"></span>
+        <button type="button" id="btnNet" class="btn small">📶 فحص الاتصال</button>
+        <span id="netStatus" class="bgStatus"></span>
       </div>
     </section>
 
@@ -129,6 +139,26 @@
   <div class="pickerHead">➕ عيب ما لقطتو — شو نوعو؟</div>
   <div id="pickerGrid" class="pickerGrid"></div>
   <button type="button" id="btnPickerCancel" class="btn">رجوع</button>
+</div>
+
+<!-- device setup (app.js showSetup): the role of this device, the pairing code and the name; stored on the device, applied by a reload -->
+<div id="setup" class="welcome" hidden>
+  <div class="wcard">
+    <div class="wlogo">SOLANG Vision QC</div>
+    <div class="sub">فحص الجودة النهائي بالكاميرا</div>
+    <h2 class="wtitle">هاد الجهاز شو دورو؟</h2>
+    <button type="button" class="role" data-role="camera"><span class="ric">📷</span><span><b>موبايل فوق الطاولة</b><small>بيصوّر القطعة لحالو وبيبعتها للمفتشة</small></span></button>
+    <button type="button" class="role" data-role="review"><span class="ric">🧐</span><span><b>تابلت المفتشة</b><small>بيعرض النتيجة، بتأكد وبتقرّر</small></span></button>
+    <button type="button" class="role small" data-role="all"><span class="ric">📱</span><span><b>جهاز واحد</b><small>للتجربة والديمو: الكاميرا والمراجعة سوا</small></span></button>
+    <label class="field">رمز الربط (نفسو عالجهازين، اختياري)<input id="setCode" type="text" autocomplete="off"></label>
+    <label class="field">الاسم (الجهاز أو المفتشة)<input id="setName" type="text" autocomplete="off" placeholder="متل: كاميرا 1"></label>
+    <div class="wrow">
+      <button type="button" id="btnSetupStart" class="btn primary big">ابدأ</button>
+      <button type="button" id="btnSetupClose" class="btn small" hidden>رجوع</button>
+      <button type="button" id="btnNet2" class="btn small">📶 فحص الاتصال</button>
+    </div>
+    <div id="netStatus2" class="wnote"></div>
+  </div>
 </div>
 
 <!-- first-visit card (station/welcome.js): the page is Arabic by default → pick a language → how to try it with one phone -->

@@ -21,9 +21,12 @@ const PILL = { idle: t('جاهزة'), moving: t('في حركة'), settling: t('�
 const SAMPLE_W = 64, SAMPLE_H = 48           // detector sample size (matches StillnessDetector defaults)
 // Two-device setup: the phone above the table opens ?mode=camera (captures, inspects and saves automatically, decision left
 // open), the inspector's tablet opens ?mode=review (no camera; new inspections pop up for confirm/reject/decision).
-// Without ?mode the page does everything on one device (desktop testing, single-device demo).
+// The setup screen (role + pairing code + name) stores the role on the device; ?mode=all is the single-device mode (demo, desktop testing).
 const PARAMS = new URLSearchParams(location.search)
-const MODE = ['camera', 'review'].includes(PARAMS.get('mode')) ? PARAMS.get('mode') : 'all'
+const ROLES = ['camera', 'review', 'all']
+// the device role: ?mode= (docs, tests) wins; otherwise what the setup screen stored on this device (localStorage vqc_role);
+// nothing yet → MODE is null and init() shows the setup screen instead of starting anything
+const MODE = ROLES.includes(PARAMS.get('mode')) ? PARAMS.get('mode') : ROLES.includes((() => { try { return localStorage.getItem('vqc_role') } catch (e) { return null } })()) ? localStorage.getItem('vqc_role') : null
 const DEV = ['localhost', '127.0.0.1'].includes(location.hostname)   // dev-only switches: ?fakecam=1 (drawn test pattern instead of a camera), ?station=x (own link channel)
 const REVIEW_POLL_MS = 3000, CAMERA_NEXT_MS = 4000
 const LINK_STATE_MS = 2000, PEER_TTL_MS = 7000, ACK_WAIT_MS = 4000   // phone ⇄ tablet link: state every 2 s, a peer silent for 7 s is gone, a shot request waits 4 s for its ack
@@ -90,8 +93,11 @@ async function requestWakeLock() {
 // ── init ─────────────────────────────────────────────────────────────────────
 async function init() {
   applyStatic()                                 // English UI when chosen (i18n.js); the Arabic source text is the key
+  wireSetup()
+  // first visit: pick a language, then a 3-step how-to — before anything asks for the camera (welcome.js); «?» reopens the how-to
+  if (!langChosen() || !welcomed() || PARAMS.has('welcome')) await showWelcome(langChosen() ? 'how' : 'lang')
+  if (!MODE) { showSetup(); return }            // no role on this device yet: the setup screen (role + pairing code + name) ends with a reload
   document.body.classList.add('mode-' + MODE)
-  document.querySelectorAll('#modeNav a').forEach((a) => a.classList.toggle('active', a.dataset.mode === MODE))
   if (MODE === 'camera') $('inspector').placeholder = t('اسم الجهاز (متل: كاميرا 1)')
   buildPicker(); wire()
   S.inspector = lsGet('vqc_inspector') || ''; $('inspector').value = S.inspector
@@ -107,9 +113,8 @@ async function init() {
     S.db.listWorkers().then((w) => { S.workers = w || [] }, (e) => banner(t('ما قدرت جيب العمال: ') + msg(e)))
     refreshStats(); loadHistory()
   }
-  // first visit: pick a language, then a 3-step how-to — before the camera asks for permission (welcome.js); «?» reopens the how-to
-  if (!langChosen() || !welcomed() || PARAMS.has('welcome')) await showWelcome(langChosen() ? 'how' : 'lang')
-  if (MODE === 'review') startReview(); else startCamera()
+  // the camera starts by itself once it worked on this device (vqc_cam_ok); the first time a clear «شغّل الكاميرا» tap asks for it
+  if (MODE === 'review') startReview(); else if (lsGet('vqc_cam_ok') === '1' || (DEV && PARAMS.has('fakecam'))) startCamera(); else showCamStart('')
   $('linkBar').hidden = MODE !== 'review'
   if (MODE !== 'all' && S.cfg && S.cfg.SUPABASE_URL && S.cfg.SUPABASE_KEY) startLink()      // the two device modes talk over the Realtime link
   requestWakeLock(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') requestWakeLock() })
@@ -136,8 +141,9 @@ function wire() {
   $('btnNew').addEventListener('click', newPiece)
   $('btnBack').addEventListener('click', newPiece)
   $('btnRemote').addEventListener('click', requestRemoteCapture)
-  $('btnLang').addEventListener('click', () => setLang(isEn() ? 'ar' : 'en'))
-  $('btnHelp').addEventListener('click', () => showWelcome('how'))
+  $('btnCamStart').addEventListener('click', () => startCamera())
+  $('btnMore').addEventListener('click', () => { $('moreRow').hidden = !$('moreRow').hidden })
+  $('btnNet').addEventListener('click', checkConnection)
   // overlay alignment needs no JS on resize: the svg is positioned on the same box as the <img> (see style.css .photoWrap)
 }
 
@@ -173,14 +179,15 @@ async function startCamera() {
   } catch (e) {
     S.cam = DEV && PARAMS.has('fakecam') ? fakeCamera(video) : null     // desktop development only: a drawn test pattern stands in for the camera
     if (!S.cam) {
-      // desktop / no permission: hide the pill, keep the file button usable
+      // desktop / no permission: the start panel stays with the reason, the pill goes, «⋯» opens with the file button usable
       S.camStarting = false; $('pill').hidden = true; $('btnShoot').disabled = true; $('btnFlip').disabled = true
-      const m = $('camMsg'); m.textContent = t('الكاميرا ما اشتغلت على هالجهاز — استعمل «📁 صورة من الجهاز». ({err})', { err: msg(e) }); m.hidden = false
+      showCamStart(t('الكاميرا ما اشتغلت على هالجهاز — استعمل «📁 صورة من الجهاز». ({err})', { err: msg(e) })); $('moreRow').hidden = false
       return
     }
   }
   S.camStarting = false
   $('pill').hidden = false; $('btnShoot').disabled = false; $('btnFlip').disabled = false; $('camMsg').hidden = true
+  $('camStart').hidden = true; if (!(DEV && PARAMS.has('fakecam'))) lsSet('vqc_cam_ok', '1')   // next load starts the camera without the tap
   S.cam.onLost = cameraLost
   if (S.live && MODE === 'camera') S.live.replaceTrack(S.cam.track)          // tablets already watching get the new camera
   S.det = new StillnessDetector()
@@ -189,6 +196,9 @@ async function startCamera() {
   setPill('idle')
   S.loop = setInterval(sampleTick, 125)        // ~8 fps is plenty for a hands-left-the-frame detector
 }
+
+// the «شغّل الكاميرا» panel: first time on a device (the permission prompt follows a clear tap), or after a camera failure (with the reason)
+function showCamStart(text) { $('camStart').hidden = false; const m = $('camStartMsg'); m.textContent = text || ''; m.hidden = !text }
 
 // ?fakecam=1 on localhost: a 640×480 canvas with a moving block, exposed like a camera (stills come from the frame grab) — lets the whole
 // two-device flow, including the live view, be exercised on a desktop without a camera
@@ -373,13 +383,13 @@ function framingText(f) {
 function showFraming(f) { const txt = framingText(f); $('frameWarn').textContent = txt; $('frameWarn').hidden = !txt }
 
 // ── learning loop: the inspector's earlier verdicts on this product become references for the verifier ─────────
-// up to 3 «defect» + 3 «not a defect» crops, newest first, downscaled to 400 px; anything that fails to load just drops out
+// up to 2 «defect» + 2 «not_defect» crops, newest first, downscaled to 320 px (they ride on every verify call, bytes matter on a factory Wi-Fi)
 async function loadExamples(modelCode) {
   try {
     const rows = (await S.db.examplesFor(modelCode, 30)) || []
-    const pick = (label) => rows.filter((r) => r.label === label && r.crop_path).slice(0, 3)
+    const pick = (label) => rows.filter((r) => r.label === label && r.crop_path).slice(0, 2)
     const out = await Promise.all([...pick('defect'), ...pick('not_defect')].map(async (r) => {
-      try { return { label: r.label === 'defect' ? 'defect' : 'not_defect', type: TYPE_AR[r.type] ? r.type : 'other', note: '', b64: await urlToB64(S.db.publicUrl(r.crop_path), 400) } } catch (e) { return null }   // no free DB text in the prompt
+      try { return { label: r.label === 'defect' ? 'defect' : 'not_defect', type: TYPE_AR[r.type] ? r.type : 'other', note: '', b64: await urlToB64(S.db.publicUrl(r.crop_path), 320) } } catch (e) { return null }   // no free DB text in the prompt
     }))
     return out.filter(Boolean)
   } catch (e) { return [] }
@@ -621,7 +631,7 @@ function saveInspection() {
   if (!S.decision || !S.img || !S.db) return
   if (S.job && (S.job.busy || S.job.done)) return
   // the job takes a SNAPSHOT of the list and the cards are frozen from now on: a retry writes exactly what the inspector saw
-  if (!S.job) S.job = { busy: false, done: false, img: S.img, blob: S.blob, res: S.res, findings: S.findings.slice(), order: S.order, side: S.side, inspector: S.inspector, decision: S.decision, incomplete: S.incomplete, id: null, date: null, paths: {}, prep: null, patched: false, findingIds: null, examples: false, closeAfter: false, photoScaled: false }
+  if (!S.job) S.job = { busy: false, done: false, img: S.img, blob: S.blob, res: S.res, findings: S.findings.slice(), order: S.order, side: S.side, inspector: S.inspector, decision: S.decision, incomplete: S.incomplete, id: null, date: null, paths: {}, prep: null, released: false, patched: false, findingIds: null, examples: false, closeAfter: false, photoScaled: false }
   renderCards(); updateSaveEnabled()
   runSave(S.job)
 }
@@ -629,7 +639,7 @@ function saveInspection() {
 // ?mode=camera: no decision on this device — save right after the run (decision null = waiting for the review screen), then go back to the camera
 function autoSave(img) {
   if (S.job || S.img !== img) return
-  S.job = { busy: false, done: false, img: S.img, blob: S.blob, res: S.res, findings: S.findings.slice(), order: S.order, side: S.side, inspector: S.inspector, decision: null, incomplete: S.incomplete, id: null, date: null, paths: {}, prep: null, patched: false, findingIds: null, examples: false, closeAfter: false, photoScaled: false, auto: true }
+  S.job = { busy: false, done: false, img: S.img, blob: S.blob, res: S.res, findings: S.findings.slice(), order: S.order, side: S.side, inspector: S.inspector, decision: null, incomplete: S.incomplete, id: null, date: null, paths: {}, prep: null, released: false, patched: false, findingIds: null, examples: false, closeAfter: false, photoScaled: false, auto: true }
   renderCards(); updateSaveEnabled()
   runSave(S.job)
 }
@@ -650,9 +660,9 @@ async function runSave(job) {
       job.id = r.id; job.date = ymd(r.created_at ? new Date(r.created_at) : new Date())
     }
     const base = `${job.date}/${job.id}/`
-    if (!job.paths.photo) { st(t('عم رفع الصورة…')); await db.uploadPhoto(base + 'photo.jpg', job.prep.photo); job.paths.photo = base + 'photo.jpg' }
+    // light files first (preview, crops, rows), then the piece is RELEASED to the review screen; the heavy full photo and the annotated
+    // copy follow in the background — on a slow Wi-Fi the tablet sees the piece 20–40 s earlier (the review screen works from preview.jpg)
     if (!job.paths.preview && job.prep.preview) { st(t('عم رفع المعاينة…')); await db.uploadPhoto(base + 'preview.jpg', job.prep.preview); job.paths.preview = base + 'preview.jpg' }
-    if (!job.paths.annotated && job.prep.annotated) { st(t('عم رفع الصورة المعلّمة…')); await db.uploadPhoto(base + 'annotated.jpg', job.prep.annotated); job.paths.annotated = base + 'annotated.jpg' }
     for (let i = 0; i < n; i++) {
       const f = job.findings[i]
       if (f._cropPath || !job.prep.crops[i]) continue
@@ -675,18 +685,24 @@ async function runSave(job) {
       if (ex.length) await db.insertExamples(ex)
       job.examples = true
     }
-    // released to the review screen LAST: photo_path set = photo, preview, crops and finding rows are all in place (the tablet polls and opens only such rows)
-    if (!job.patched) { await db.updateInspection(job.id, { photo_path: job.paths.photo, annotated_path: job.paths.annotated || null, decision: job.decision }); job.patched = true }
-    job.done = true; st(job.auto ? t('✓ انبعتت للمراجعة') : t('✓ انحفظ'), 'ok')
-    if (job.auto) { S.lastSavedId = job.id; if (S.link) S.link.send('saved', { id: job.id }) }   // the tablet polls right away
-    S.detached = S.detached.filter((j) => j !== job)
-    if (S.job === job) { renderCards(); updateSaveEnabled() } else toast(t('✓ انحفظ فحص القطعة السابقة{id}', { id: job.id ? ' (#' + job.id + ')' : '' }))
-    refreshStats(); loadHistory()
-    if (job.auto) {                                            // camera device: show the result briefly, then wait for the next piece
-      const nf = job.findings.length, nr = job.findings.filter((f) => f.level === 'red').length
-      $('camLast').textContent = t('آخر قطعة #{id}: {what} — انبعتت للمراجعة', { id: job.id, what: nf ? t('{n} نقطة', { n: nf }) + (nr ? t(' ({r} أحمر)', { r: nr }) : '') : t('ما في نقاط') }); $('camLast').hidden = false
-      if (S.job === job) setTimeout(() => { if (S.job === job && !S.running) newPiece() }, CAMERA_NEXT_MS)
+    if (!job.released) {
+      // photo_path set = preview, crops and rows are in place: the tablet polls and opens only such rows; photo.jpg itself lands below
+      await db.updateInspection(job.id, { photo_path: base + 'photo.jpg', decision: job.decision }); job.released = true
+      if (job.auto) {                                          // camera device: tell the tablet now, show the result briefly, then wait for the next piece
+        S.lastSavedId = job.id; if (S.link) S.link.send('saved', { id: job.id })
+        const nf = job.findings.length, nr = job.findings.filter((f) => f.level === 'red').length
+        $('camLast').textContent = t('آخر قطعة #{id}: {what} — انبعتت للمراجعة', { id: job.id, what: nf ? t('{n} نقطة', { n: nf }) + (nr ? t(' ({r} أحمر)', { r: nr }) : '') : t('ما في نقاط') }); $('camLast').hidden = false
+        if (S.job === job) setTimeout(() => { if (S.job === job && !S.running) newPiece() }, CAMERA_NEXT_MS)   // the uploads below go on detached
+      } else st(t('✓ انحفظ — عم رفع الصورة الكاملة…'), 'ok')
+      refreshStats(); loadHistory()
     }
+    if (!job.paths.photo) { if (!job.auto) st(t('عم رفع الصورة…')); await db.uploadPhoto(base + 'photo.jpg', job.prep.photo); job.paths.photo = base + 'photo.jpg' }
+    if (!job.paths.annotated && job.prep.annotated) { if (!job.auto) st(t('عم رفع الصورة المعلّمة…')); await db.uploadPhoto(base + 'annotated.jpg', job.prep.annotated); job.paths.annotated = base + 'annotated.jpg' }
+    if (!job.patched) { await db.updateInspection(job.id, { annotated_path: job.paths.annotated || null }); job.patched = true }
+    job.done = true; st(job.auto ? t('✓ انبعتت للمراجعة') : t('✓ انحفظ'), 'ok')
+    S.detached = S.detached.filter((j) => j !== job)
+    if (S.job === job) { renderCards(); updateSaveEnabled() } else if (!job.auto) toast(t('✓ انحفظ فحص القطعة السابقة{id}', { id: job.id ? ' (#' + job.id + ')' : '' }))
+    loadHistory()
   } catch (e) {
     st(t('ما انحفظ: ') + msg(e), 'bad')
     if (S.job === job) { $('btnRetry').hidden = false; if (job.auto) $('camLast').textContent = t('آخر قطعة ما انبعتت: ') + msg(e) }
@@ -757,6 +773,56 @@ function findingRow(job, f) {
     crop_path: f._cropPath || null, verdict: f.verdict || null, verdict_by: f.verdict ? (job.inspector || null) : null,
     verdict_at: f.verdict ? (f.verdict_at || new Date().toISOString()) : null, worker_name: f.worker_name || null, stage: f.stage || null,
   }
+}
+
+// ── setup screen: the role of this device (phone above the table / inspector tablet / one device), the pairing code and the name ──
+// Stored on the device (vqc_role, vqc_link_code, vqc_inspector) and applied by a reload: MODE is fixed per page load.
+function wireSetup() {
+  $('btnLang').addEventListener('click', () => setLang(isEn() ? 'ar' : 'en'))
+  $('btnHelp').addEventListener('click', () => showWelcome('how'))
+  $('btnSetup').addEventListener('click', showSetup)
+  document.querySelectorAll('#setup .role').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('#setup .role').forEach((x) => x.classList.toggle('sel', x === b))
+    $('setName').placeholder = b.dataset.role === 'review' ? t('اسم المفتشة') : t('متل: كاميرا 1')
+  }))
+  $('btnSetupStart').addEventListener('click', saveSetup)
+  $('btnSetupClose').addEventListener('click', () => { $('setup').hidden = true })
+  $('btnNet2').addEventListener('click', checkConnection)
+}
+function showSetup() {
+  document.querySelectorAll('#setup .role').forEach((x) => x.classList.toggle('sel', x.dataset.role === MODE))
+  $('setCode').value = linkCode(); $('setName').value = lsGet('vqc_inspector') || ''
+  $('setName').placeholder = MODE === 'review' ? t('اسم المفتشة') : t('متل: كاميرا 1')
+  $('btnSetupClose').hidden = !MODE
+  $('setup').hidden = false
+}
+function saveSetup() {
+  const sel = document.querySelector('#setup .role.sel'); if (!sel) { toast(t('اختار دور الجهاز أول')); return }
+  const code = $('setCode').value.trim()
+  lsSet('vqc_role', sel.dataset.role); lsSet('vqc_inspector', $('setName').value.trim())
+  if (code) lsSet('vqc_link_code', code); else { try { localStorage.removeItem('vqc_link_code') } catch (e) { /* ignore */ } }
+  const u = new URL(location.href); u.searchParams.delete('mode'); u.searchParams.delete('welcome'); location.replace(u.toString())   // dev switches (?station, ?fakecam) stay
+}
+
+// ── «📶 فحص الاتصال»: ~1 MB of random bytes up to the proxy (/ping) + one small round trip — says whether the Wi-Fi here is why pieces take long ──
+async function checkConnection() {
+  const base = S.cfg && S.cfg.PROXY_URL ? String(S.cfg.PROXY_URL).replace(/\/+$/, '') : ''
+  const say = (txt) => ['netStatus', 'netStatus2'].forEach((id) => { const e = $(id); if (e) e.textContent = txt })
+  say(t('📶 عم قيس سرعة الرفع…'))
+  try {
+    const bytes = 1024 * 1024, data = new Uint8Array(bytes)
+    for (let i = 0; i < bytes; i += 65536) crypto.getRandomValues(data.subarray(i, Math.min(bytes, i + 65536)))   // random: nothing to compress on the way
+    const t0 = performance.now()
+    const r = await fetch(base + '/ping', { method: 'POST', body: data, headers: { 'Content-Type': 'application/octet-stream' } })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    const up = performance.now() - t0
+    const t1 = performance.now(); await fetch(base + '/health', { cache: 'no-store' }); const rtt = Math.round(performance.now() - t1)
+    const mbps = Math.round(bytes * 8 / 1000 / up * 10) / 10                 // Mbit/s
+    const perPiece = Math.max(1, Math.round(8 * 8 / Math.max(0.1, mbps)))    // ~8 MB leave the device per piece (tiles + crops + the photo)
+    const grade = mbps < 2 ? t('ضعيف') : mbps < 8 ? t('متوسط') : t('منيح')
+    S.net = { mbps, rtt, at: Date.now() }
+    say(t('📶 رفع {mbps} ميغابت/ث ({grade}) · ردّ {rtt} ms — الرفع لحالو حوالي {s} ث للقطعة', { mbps, grade, rtt, s: perPiece }))
+  } catch (e) { say(t('📶 ما قدرت قيس: ') + msg(e)) }
 }
 
 // ── two-device link: camera phone ⇄ review tablet (link.js, Realtime broadcast) ──────────────────────
@@ -870,14 +936,16 @@ function renderLive() {
   const show = live || S.live.connecting() || !!reason
   w.hidden = !show; if (!show) return
   w.classList.toggle('live', live); w.classList.toggle('small', !!S.reviewId && !S.liveBig)
-  $('liveCap').textContent = live ? t('📡 مباشر من الموبايل') + (S.reviewId && !S.liveBig ? t(' — كبسي للتكبير') : '') : reason ? '📡 ' + reason : t('📡 عم وصل بث الكاميرا…')
+  const tl = S.live.timeline ? S.live.timeline() : null, s = tl ? Math.round(tl.since) : 0
+  const step = tl && tl.since >= 2 ? (tl.connected != null ? t(' · {s} ث: اتصل، ناطر أول صورة', { s }) : tl.offer != null ? t(' · {s} ث: العرض وصل، عم يتصل', { s }) : t(' · {s} ث: ناطر عرض من الموبايل', { s })) : ''   // where the attempt stands (the «why is it slow» line)
+  $('liveCap').textContent = live ? t('📡 مباشر من الموبايل') + (S.reviewId && !S.liveBig ? t(' — كبسي للتكبير') : '') : reason ? '📡 ' + reason + step : t('📡 عم وصل بث الكاميرا…') + step
 }
 // status line on both devices; on the tablet also the «📸» button (enabled only when the phone can shoot now)
 function renderLink() {
   const alive = !!S.peer && Date.now() - S.peerSeen < PEER_TTL_MS
   if (MODE === 'camera') {
     const m = $('camLink'); if (!S.link) { m.hidden = true; return }
-    m.textContent = (!S.linkUp ? t('🔌 عم وصل بشاشة المراجعة…') : alive ? t('🧐 شاشة المراجعة متصلة{by} — فيها تطلب الفحص من عندها', { by: S.peer.by ? ' (' + S.peer.by + ')' : '' }) : t('🧐 شاشة المراجعة مش مفتوحة — افتح ?mode=review عالتابلت')) + (S.live && S.live.viewers() ? t(' · 📡 البث شغّال') : '') + (linkCode() ? ' 🔑' : '')
+    m.textContent = (!S.linkUp ? t('🔌 عم وصل بشاشة المراجعة…') : alive ? t('🧐 شاشة المراجعة متصلة{by} — فيها تطلب الفحص من عندها', { by: S.peer.by ? ' (' + S.peer.by + ')' : '' }) : t('🧐 شاشة المراجعة مش مفتوحة — افتح الرابط عالتابلت واختار «تابلت المفتشة»')) + (S.live && S.live.viewers() ? t(' · 📡 البث شغّال') : '') + (linkCode() ? ' 🔑' : '')
     m.className = 'msg' + (alive ? ' ok' : ''); m.hidden = false; return
   }
   if (MODE !== 'review') return
@@ -913,7 +981,7 @@ async function reviewTick() {
   if (!S.db || S.reviewBusy || S.running) return
   let list
   try { list = (await S.db.recentInspections(12)) || [] } catch (e) { return }
-  const changed = JSON.stringify(list.map((h) => [h.id, h.decision, h.photo_path])) !== JSON.stringify(S.history.map((h) => [h.id, h.decision, h.photo_path]))
+  const changed = JSON.stringify(list.map((h) => [h.id, h.decision, h.photo_path, h.annotated_path])) !== JSON.stringify(S.history.map((h) => [h.id, h.decision, h.photo_path, h.annotated_path]))
   S.history = list
   if (changed) renderStrip()
   const pending = list.filter(isPending).sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
@@ -1044,7 +1112,7 @@ function renderStrip() {
     const b = el('button', 'hist' + (pending ? ' pending' : '') + (uploading ? ' uploading' : '') + (S.reviewId === h.id ? ' current' : '')); b.type = 'button'
     const im = el('img'); im.alt = ''; im.loading = 'lazy'; im.decoding = 'async'
     // the 1600 px annotated copy is far lighter than the full-res photo; photo_path is the fallback
-    const p = h.annotated_path || h.photo_path; if (p) im.src = S.db.publicUrl(p)
+    const p = h.annotated_path || (h.photo_path ? h.photo_path.replace(/photo\.jpg$/, 'preview.jpg') : null); if (p) im.src = S.db.publicUrl(p)   // preview.jpg is there from the release; annotated.jpg lands later
     b.appendChild(im)
     b.appendChild(el('span', 'hdec', uploading ? '⏫' : pending ? '⏳' : (DEC_EMOJI[h.decision] || '·')))
     b.appendChild(el('span', 'hord', h.order_number || h.model_code || ''))

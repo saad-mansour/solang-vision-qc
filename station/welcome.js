@@ -14,11 +14,12 @@ const TEXT = {
     intro: 'Live demo of an AI final-quality check for garments, built inside a children\'s-wear factory in Cairo. The page is in Arabic by default — pick a language:',
     howTitle: 'How to try it — one phone is enough',
     steps: [
-      'Allow the camera when the browser asks. The back camera works best.',
-      'Lay one garment flat on a plain table and fill the frame with it. Hold the phone still: it shoots by itself when the scene is steady (or tap «📸 Inspect now»). No camera? Use «📁 Photo from device».',
+      'Tap «📷 Start the camera» and allow it when the browser asks. The back camera works best.',
+      'Lay one garment flat on a plain table and fill the frame with it. Hold the phone still: it shoots by itself when the scene is steady (or tap the big 📸 button). No camera? Open «⋯» and use «📁 Photo from device».',
       'In 15–25 seconds you get numbered circles: red = likely defect, amber = worth a look, blue = overall (symmetry, length). Tap ✓ or ✗ on each card, pick a decision and save — your verdicts become reference examples for the next inspection of the same product.',
     ],
     notes: [
+      'After this card a setup screen asks what this device is — choose «One device» to try it on your own.',
       'In the factory this runs on two devices: a phone fixed above the table and the inspector\'s tablet (see the README).',
       'Every inspection calls Meta\'s API on the developer\'s account — please keep tries reasonable.',
     ],
@@ -28,11 +29,12 @@ const TEXT = {
     intro: 'ديمو حي لفحص الجودة النهائي للملابس بالذكاء الاصطناعي، مبني جوّا مصنع ملابس أطفال بالقاهرة. الصفحة بالعربي افتراضياً — اختار اللغة:',
     howTitle: 'كيف تجرّب — موبايل واحد بيكفي',
     steps: [
-      'اسمح للكاميرا لما يسألك المتصفح. الكاميرا الخلفية أفضل.',
-      'افرد قطعة وحدة على طاولة سادة وعبّي الكادر فيها. ثبّت الموبايل: بيصوّر لحالو لما يهدا المشهد (أو اكبس «📸 افحص هلق»). ما في كاميرا؟ استعمل «📁 صورة من الجهاز».',
+      'اكبس «📷 شغّل الكاميرا» واسمح للمتصفح لما يسألك. الكاميرا الخلفية أفضل.',
+      'افرد قطعة وحدة على طاولة سادة وعبّي الكادر فيها. ثبّت الموبايل: بيصوّر لحالو لما يهدا المشهد (أو اكبس زر 📸 الكبير). ما في كاميرا؟ افتح «⋯» واستعمل «📁 صورة من الجهاز».',
       'خلال 15–25 ثانية بتطلع دواير مرقّمة: أحمر = عيب مرجّح، برتقالي = بدها نظرة، أزرق = عام (تناظر، طول). اكبس ✓ أو ✗ على كل كرت، اختار القرار واحفظ — أحكامك بتصير أمثلة مرجعية للفحص الجاي من نفس الموديل.',
     ],
     notes: [
+      'بعد هالكرت بتطلع شاشة الإعداد وبتسأل شو هاد الجهاز — اختار «جهاز واحد» للتجربة لحالك.',
       'بالمصنع بيشتغل على جهازين: موبايل مثبّت فوق الطاولة وتابلت المفتشة (التفاصيل بالـREADME).',
       'كل فحص بيكلّم API تبع Meta على حساب المطوّر — خلّي التجارب معقولة.',
     ],

@@ -73,8 +73,7 @@ export const EN = {
   'خطأ غير معروف': 'unknown error',
 
   // static page (index.html)
-  'الطلبية': 'Order', 'الجهة': 'Side', 'اسم المفتشة': 'Inspector name', 'وضع الجهاز': 'Device mode',
-  'الكل': 'All', '📷 كاميرا': '📷 Camera', '🧐 مراجعة': '🧐 Review',
+  'الطلبية': 'Order', 'الجهة': 'Side', 'اسم المفتشة': 'Inspector name',
   'لقطة تلقائية': 'Auto shoot', '📸 افحص هلق': '📸 Inspect now', '📁 صورة من الجهاز': '📁 Photo from device', '🔄 كاميرا': '🔄 Flip camera',
   '🧹 صوّر الطاولة فاضية': '🧹 Photograph the empty table',
   '⬅ رجوع للكاميرا': '⬅ Back to camera', '⬅ رجوع للمراجعة': '⬅ Back to review',
@@ -186,7 +185,7 @@ export const EN = {
   '📡 مباشر من الموبايل': '📡 Live from the phone', ' — كبسي للتكبير': ' — tap to enlarge',
   '🔌 عم وصل بشاشة المراجعة…': '🔌 Connecting to the review screen…',
   '🧐 شاشة المراجعة متصلة{by} — فيها تطلب الفحص من عندها': '🧐 Review screen connected{by} — it can trigger the inspection',
-  '🧐 شاشة المراجعة مش مفتوحة — افتح ?mode=review عالتابلت': '🧐 Review screen not open — open ?mode=review on the tablet',
+  '🧐 شاشة المراجعة مش مفتوحة — افتح الرابط عالتابلت واختار «تابلت المفتشة»': '🧐 Review screen not open — open the link on the tablet and choose «Inspector\'s tablet»',
   ' · 📡 البث شغّال': ' · 📡 streaming',
   'ما في اتصال بالموبايل (config.js)': 'No connection to the phone (config.js)',
   '📷 الموبايل مش متصل — افتحي رابط الكاميرا عليه': '📷 Phone not connected — open the camera link on it',
@@ -232,4 +231,21 @@ export const EN = {
   'البث ما وصل بعد — الجهازين لازم يكونوا على نفس الواي فاي': 'No stream yet — both devices must be on the same Wi-Fi',
   'الشبكة ما سمحت بالاتصال المباشر بين الجهازين (واي فاي منفصل أو عزل بين الأجهزة)': 'The network blocked the direct connection between the devices (separate Wi-Fi or client isolation)',
   'ما قدرت أفتح البث: ': 'Could not open the stream: ', 'الموبايل ما قدر يبعت البث': 'The phone could not send the stream',
+  ' · {s} ث: ناطر عرض من الموبايل': ' · {s} s: waiting for the phone\'s offer', ' · {s} ث: العرض وصل، عم يتصل': ' · {s} s: offer received, connecting',
+  ' · {s} ث: اتصل، ناطر أول صورة': ' · {s} s: connected, waiting for the first frame',
+
+  // device setup, camera start, controls row, connection check (Oct 28)
+  'إعدادات الجهاز': 'Device settings', 'فحص الجودة النهائي بالكاميرا': 'Final quality check by camera', 'هاد الجهاز شو دورو؟': 'What is this device?',
+  'موبايل فوق الطاولة': 'Phone above the table', 'بيصوّر القطعة لحالو وبيبعتها للمفتشة': 'Shoots each piece by itself and sends it to the inspector',
+  'تابلت المفتشة': 'Inspector\'s tablet', 'بيعرض النتيجة، بتأكد وبتقرّر': 'Shows the result; you confirm and decide',
+  'جهاز واحد': 'One device', 'للتجربة والديمو: الكاميرا والمراجعة سوا': 'For trying and demos: camera and review together',
+  'رمز الربط (نفسو عالجهازين، اختياري)': 'Pairing code (the same on both devices, optional)', 'الاسم (الجهاز أو المفتشة)': 'Name (device or inspector)',
+  'متل: كاميرا 1': 'e.g. Camera 1', 'ابدأ': 'Start', 'اختار دور الجهاز أول': 'Choose the device role first',
+  'شغّل الكاميرا': 'Start the camera', 'المتصفح رح يسألك تسمح للكاميرا — اختار «السماح».': 'The browser will ask for the camera — choose «Allow».',
+  'ثبّت الموبايل فوق نص الطاولة · الطاولة فاضية وسادة · الضو ثابت · بعدين من «⋯» صوّر الطاولة فاضية مرة وحدة': 'Fix the phone above the middle of the table · plain, empty table · steady light · then photograph the empty table once from «⋯»',
+  'حطّ القطعة جوّا الإطار وشيل إيديك': 'Put the garment inside the frame and take your hands away',
+  'تلقائي': 'Auto', 'المزيد': 'More', '📶 فحص الاتصال': '📶 Connection check',
+  '📶 عم قيس سرعة الرفع…': '📶 Measuring upload speed…', 'ضعيف': 'weak', 'متوسط': 'medium', 'منيح': 'good',
+  '📶 رفع {mbps} ميغابت/ث ({grade}) · ردّ {rtt} ms — الرفع لحالو حوالي {s} ث للقطعة': '📶 Upload {mbps} Mbit/s ({grade}) · round trip {rtt} ms — uploads alone take about {s} s per piece',
+  '📶 ما قدرت قيس: ': '📶 Could not measure: ', '✓ انحفظ — عم رفع الصورة الكاملة…': '✓ Saved — uploading the full photo…',
 }
