@@ -285,7 +285,7 @@ async function runInspection(blob, sourceLabel) {
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, requireGarment: true, lang: LANG, tilePasses: 2 })   // every tile asked twice (Saad, Oct 28: «it found something I had not seen» — worth +3 s)
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, requireGarment: true, lang: LANG, tilePasses: 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress(t('انلغى الفحص')); return }
@@ -543,7 +543,7 @@ function cardHead(f, i) {
   head.appendChild(el('span', 'type', TYPE_AR[f.type] || f.type || t('شي تاني')))
   head.appendChild(el('span', 'conf', Math.round((+f.confidence || 0) * 100) + '%'))
   if (f.kind === 'global') head.appendChild(el('span', 'tag', f.source === 'silhouette' ? t('قياس') : f.source === 'mirror' ? t('مقارنة') : t('عام')))
-  if (f.source === 'decor') head.appendChild(el('span', 'tag', t('تطريز/طباعة')))
+  if (f.source === 'decor' || f.decor) head.appendChild(el('span', 'tag', t('تطريز/طباعة')))
   if (f.unsure) head.appendChild(el('span', 'tag unsure', t('مش متأكد')))
   if (f.severity === 'major' && f.source !== 'inspector') head.appendChild(el('span', 'tag unsure', t('كبير')))
   head.addEventListener('click', () => highlightMark(i))

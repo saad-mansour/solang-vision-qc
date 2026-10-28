@@ -229,8 +229,10 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   `embroidered design` and `printed design` on the small copy → boxes on the garment (0.1 % of the frame ≤ area ≤ 60 % of the garment, IoU > 0.4
   merged, largest first) → each cut from the full photo with a 15 % margin, magnified up to 3× (~1200 px), `PROMPTS.decor` at low effort →
   findings `{kind:'local', source:'decor', type: loose_thread|stitching|print|hole|stain, level by confidence}` (≥ amber only). Progress
-  `decor{count}`, `stage_done decor`, `timings.decor`; `result.decor = {found, sent, boxes}`. A decor finding within 150 px of a confirmed tile
-  finding is dropped. The station shows the tag «تطريز/طباعة» on such cards. Skipped when the garment stage failed or found no box. Capture note: on iPhone every in-browser
+  `decor{count}`, `stage_done decor`, `timings.decor`; `result.decor = {found, sent, boxes}`. `opts.decorPasses` 1…3 (station: 2) and
+  `opts.decorEffort` ('low'). A decor finding that coincides with a tile finding (same type within 150 px, or anything within 40 px) is not
+  added; when it is more confident it rewrites that tile finding's type / confidence / level / why and sets `decor: true`. The station shows
+  the tag «تطريز/طباعة» on cards with `source === 'decor' || decor`. Skipped when the garment stage failed or found no box. Capture note: on iPhone every in-browser
   camera path (stream and `<input capture>`) yields 12 MP; a Camera-app photo picked with 📁 is 24 MP — the page says so under «⋯».
 
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)

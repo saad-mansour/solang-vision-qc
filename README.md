@@ -321,7 +321,12 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
   loop both times — the station now runs with it, by the factory's choice («the first time it found something I had not seen»).
   Last of the day, the one miss that resisted everything: a thread tail on an embroidered eye (about 2 px wide at 12 MP).
   Step 8 (embroidery / print close-ups) found it in 2 of 2 runs («thin stray thread extending from eye stitch» 75 %, «light
-  thread tail hanging from black outline» 90 %) at +2 SAM calls, +3 Spark calls and about +4 s on the same capture. Harness flags `--tile`, `--overlap`, `--tile-effort`,
+  thread tail hanging from black outline» 90 %) at +2 SAM calls, +3 Spark calls and about +4 s on the same capture.
+  First live run with it (#43): the close-up's finding sat 9 px from the tile's amber «snag» at the same spot and was
+  dropped as a duplicate — now the close-up's reading replaces the tile's when it is more confident (same spot, better
+  wording: «stray thread tails outside the outline» instead of «snag»), and the station asks each design twice
+  (`decorPasses: 2`; one look missed it on that capture, two looks found it 2 of 2). The «thread or lint?» card now also
+  needs a tile confidence ≥ 0.55 — a dark speck the inspector called «not a defect» had slipped through on tile insistence alone. Harness flags `--tile`, `--overlap`, `--tile-effort`,
   `--strict`, `--passes` for such A/Bs.
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.

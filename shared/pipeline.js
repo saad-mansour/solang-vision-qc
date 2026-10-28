@@ -374,7 +374,7 @@ export async function inspect(img, opts) {
       if (v.verdict === 'defect') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: v.vconfidence, level: level(Math.max(v.vconfidence, LEVELS.amber)), severity: v.severity, why: v.vwhy, window: v.window, hits: v.hits })   // a confirmed defect is at least amber
       else if (v.verdict === 'unsure' || v.verdict === 'error') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: Math.min(0.79, v.confidence * 0.8), level: 'amber', severity: 'minor', why: WT.unsure + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
       // thread vs lint is the inspector's call: a thread end in the fabric's own colour reads as «lint» at 2× (Saad's pulled thread, Oct 28) — amber, not dropped
-      else if ((v.type === 'loose_thread' || v.vtype === 'loose_thread') && (v.verdict === 'lint' || (v.second && v.second.verdict === 'lint'))) findings.push({ kind: 'local', source: 'tiles', type: 'loose_thread', x: v.x, y: v.y, confidence: 0.5, level: 'amber', severity: 'minor', why: WT.threadOrLint + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
+      else if ((v.type === 'loose_thread' || v.vtype === 'loose_thread') && (v.verdict === 'lint' || (v.second && v.second.verdict === 'lint')) && v.vconfidence < 0.8 && v.confidence >= 0.55) findings.push({ kind: 'local', source: 'tiles', type: 'loose_thread', x: v.x, y: v.y, confidence: 0.5, level: 'amber', severity: 'minor', why: WT.threadOrLint + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
       else if ((v.hits >= 2 && v.confidence >= 0.85) || v.confidence >= 0.9) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: 0.6, level: 'amber', severity: 'minor', why: WT.two + v.verdict + ') — ' + (v.vwhy || ''), window: v.window, hits: v.hits, unsure: true })
     }
     stageDone('verify', t)
@@ -414,7 +414,11 @@ export async function inspect(img, opts) {
           const up = Math.min(3, Math.max(1, 1200 / Math.max(abs.w, abs.h)))     // magnify until the design spans ~1200 px (at most 3×)
           try {
             const b64 = await img.jpeg({ ...abs, resize: { w: Math.round(abs.w * up), h: Math.round(abs.h * up) }, quality: JQ })
-            const r = await spark(api, PROMPTS.decor, [b64], 'low'); acct(r.usage)
+            // opts.decorPasses (default 1): independent looks at the same design; opts.decorEffort (default 'low')
+            const dp = Math.max(1, Math.min(3, opts.decorPasses || 1))
+            const rs = await Promise.all(Array.from({ length: dp }, () => spark(api, PROMPTS.decor, [b64], opts.decorEffort || 'low')))
+            rs.forEach((x) => acct(x.usage))
+            const r = { json: { defects: rs.flatMap((x) => ((x.json && x.json.defects) || [])) } }
             for (const d of ((r.json && r.json.defects) || [])) {
               const c = clamp(+d.confidence || 0, 0, 1); if (c < LEVELS.amber) continue
               const p = gridToPx(d.x, d.y, abs)
@@ -512,8 +516,16 @@ export async function inspect(img, opts) {
   // both branches only need step 1's region / mask / small image → run them side by side (an abort in either rejects the whole inspection)
   const [L, G] = await Promise.all([localBranch(), globalBranch()])
   timings.total = Date.now() - t0
-  // a design flaw the tiles already found (and verify confirmed) is not reported twice
-  const gFindings = G.findings.filter(f => f.source !== 'decor' || !L.findings.some(l => Math.hypot(l.x - f.x, l.y - f.y) < 150))
+  // a design flaw the tiles already found (and verify confirmed) is not reported twice: same type within 150 px, or anything within 40 px —
+  // but the close-up's reading wins when it is more confident (a frayed thread tail at an embroidered eye read as a «snag» from the tile,
+  // «stray thread tails outside the outline» from the close-up: same spot, the second wording is the one the inspector needs)
+  const gFindings = G.findings.filter(f => {
+    if (f.source !== 'decor') return true
+    const twin = L.findings.find(l => { const d = Math.hypot(l.x - f.x, l.y - f.y); return d < 40 || (d < 150 && l.type === f.type) })
+    if (!twin) return true
+    if (f.confidence > twin.confidence) Object.assign(twin, { type: f.type, confidence: f.confidence, level: level(f.confidence), severity: f.severity, why: f.why + (twin.why ? ' · ' + twin.why : ''), decor: true })
+    return false
+  })
 
   return {
     width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...gFindings], parts: G.parts, decor: G.decor, usage, timings,
