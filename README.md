@@ -255,6 +255,23 @@ prompt follows it) and by itself afterwards. «📶 Connection check» (setup sc
 proxy's `/ping` and reports Mbit/s: on a factory Wi-Fi this, not the models, is usually why a piece takes long. HTTPS
 is required for the camera; add the page to the home screen.
 
+## Verification layers
+
+The model proposes; nothing it says reaches the inspector unchecked, and nothing is decided without a human. In the
+vocabulary of Meta's hackathon workshop on verifiable agents (deterministic checks → LLM-as-judge → ground truth from a
+domain expert → human in the loop, with the speed/accuracy trade-off made explicit):
+
+| Layer | What it is here | Where |
+|---|---|---|
+| **Deterministic checks** | Every model answer must parse as the exact JSON shape; defect types are whitelisted; coordinates are clamped to the photo; candidates that land off the garment mask are dropped; a tile with less than 8 % garment is never sent; a failed model call marks the run **incomplete** instead of letting it read as «clean»; no garment box → the run stops. The proxy allow-lists models and reasoning effort and refuses other origins. | `shared/pipeline.js`, `_worker.js` |
+| **LLM-as-judge** | Every tile candidate is re-judged on a 2× crop with a tri-state answer (defect / lint / texture / unsure) and, if not confirmed, on a 3× crop; lint and texture are dropped. The mirror comparison needs two independent «different» votes. Each tile and each design is asked twice and the answers merge (a spot seen twice counts twice). | pipeline steps 4, 6, 8 |
+| **Ground truth from the domain expert** | The inspector's confirmed and rejected crops of the same product ride along with the judge and with the design close-ups as labelled references; a reference photo of a correct piece per product rides along with the global pass and the close-ups. | `vision_examples`, `demo_orders.reference_url` |
+| **Human in the loop** | Every spot is confirmed or rejected by the inspector, who can also add spots the camera missed; the piece's decision (pass / repair / reject) is hers alone; a run that was incomplete says so on her screen. | the review screen |
+| **Speed vs accuracy, measured** | The high-recall tile prompt costs +50 % tokens for the same wall-clock; asking twice +40 % and +3 s; the design close-ups +4 s. All three are on, by the factory's choice, after they surfaced defects the strict version missed. | README build log, Oct 28 |
+
+The station shows this on every piece: «🔎 tiles raised N candidates · the magnified check confirmed K and dropped M ·
+design close-ups: D» (`result.summary`), so the inspector sees the filter working rather than wondering why 8 became 3.
+
 ## Safety and privacy
 
 - The demo database is a **separate, throwaway Supabase project with fake orders and workers**; the factory's

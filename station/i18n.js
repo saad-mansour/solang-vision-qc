@@ -123,6 +123,8 @@ export const EN = {
   'ما لقيت قطعة واضحة بالصورة': 'No clear garment in the photo', ' ث': ' s',
   ' · ركّز عالقطعة: {sent}/{tiles} بلاطة{dropped}': ' · garment focus: {sent}/{tiles} tiles{dropped}', ' · شال {k} نقطة برّا القطعة': ' · dropped {k} outside the garment',
   ' · 🧠 {k} أمثلة من المفتشة': ' · 🧠 {k} inspector {k|example|examples}',
+  '🔎 البلاطات لقطت {n} مرشّح · التأكيد المكبّر أكّد {k} وشال {m}': '🔎 Tiles raised {n} {n|candidate|candidates} · the magnified check confirmed {k} and dropped {m}',
+  ' · {u} مش متأكد (قرارك)': ' · {u} unsure (your call)', ' · التطريز عن قرب: {d}': ' · design close-ups: {d}', ' · النظرة العامة والمقارنة: {g}': ' · overall & mirror: {g}',
 
   // framing
   'فوق': 'top', 'تحت': 'bottom', 'شمال': 'left', 'يمين': 'right', ' و': ' and ',

@@ -75,7 +75,7 @@ export const PROMPTS = {
     'Compare the construction: seam lines and their positions along the body, panel shapes, pocket or decoration position, stitching lines. Ignore wrinkles, lighting, shadows, how the fabric is laid, the angle of the hem/cuff edge (it depends on the lay), and differences in where the crop was cut. ' +
     'Are there real construction differences a quality inspector would reject (seams in different positions or angles, missing or extra seam, different panel shape, decoration in a different place)? ' +
     'Answer ONLY JSON: {"different":true|false,"confidence":0-1,"differences":["short description with location"],"why":"one sentence"}',
-  global: (hasRef) => 'You are a senior garment quality inspector. ' + (hasRef
+  global: (hasRef) => 'You are a senior garment quality inspector. The garment may lie in any orientation on the table (sideways, upside down): judge the print placement and the parts relative to the garment itself (neck to hem), never relative to the photo frame — a print that reads sideways only because the garment lies sideways is correct. ' + (hasRef
     ? 'Image 1 is the garment being inspected, lying flat, top-down. Image 2 is a KNOWN GOOD reference piece of the same model. Compare them. '
     : 'The image is a garment lying flat, top-down. ') +
     'Report only GLOBAL defects that need the whole garment to see: misplaced, rotated, missing or incomplete print or decoration, missing part (button, snap, drawstring, label), twisted or misaligned seam across the body, wrong proportions. ' +
@@ -544,8 +544,14 @@ export async function inspect(img, opts) {
     return false
   })
 
+  // what the verification layers did on this piece (shown under the result: «the tiles raised N candidates, the magnified check confirmed K and dropped M»)
+  const summary = {
+    candidates: L.candidates.length, confirmed: L.findings.filter(f => !f.unsure).length, unsure: L.findings.filter(f => f.unsure).length,
+    dropped: Math.max(0, L.candidates.length - L.findings.length), decor: gFindings.filter(f => f.source === 'decor').length + L.findings.filter(f => f.decor).length,
+    global: gFindings.filter(f => f.source !== 'decor').length,
+  }
   return {
-    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...gFindings], parts: G.parts, decor: G.decor, usage, timings,
+    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...gFindings], parts: G.parts, decor: G.decor, summary, usage, timings,
     framing, focus: focus ? { tiles: L.allTiles, sent: L.tileResults.length, skipped: L.allTiles - L.tileResults.length, droppedOutside: L.droppedOutside, painted: paint, marginPx: focus.margin * focus.cell } : null,
   }
 }

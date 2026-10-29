@@ -326,7 +326,7 @@ function setView(v) {
   $('inspectPanel').hidden = v === 'camera'
   $('viewHead').hidden = v !== 'history'
   $('tapHint').hidden = v !== 'inspect'
-  if (v !== 'inspect') { $('progress').hidden = true; $('runError').hidden = true; $('costLine').textContent = '' }
+  if (v !== 'inspect') { $('progress').hidden = true; $('runError').hidden = true; $('costLine').textContent = ''; $('checkLine').textContent = '' }
   if (v !== 'inspect') $('decisionBar').hidden = true
 }
 
@@ -364,7 +364,7 @@ async function runInspection(blob, sourceLabel) {
     const failed = S.warns.filter((w) => ['garment', 'tile', 'parts', 'global'].includes(w.stage))
     S.incomplete = failed.length ? { failed: failed.length, tilesFailed: failed.filter((w) => w.stage === 'tile').length, tiles: res.tiles || 0 } : null
     S.noGarment = !!res.noGarment && !S.incomplete                 // a failed model call is never «no garment» (the pipeline goes on over the whole frame, flagged incomplete)
-    renderAll(); showCost(res)
+    renderAll(); showCost(res); showCheck(res.summary)
     if (S.incomplete) {
       setProgress(t('الفحص ما كمل — {f}/{n} بلاطة ما انفحصت', { f: S.incomplete.tilesFailed, n: S.incomplete.tiles }))
       $('runErrorText').textContent = t('{n} طلب للموديل فشل — ما تعتمد على «ما لقيت شي»:', { n: S.incomplete.failed }) + '\n' + [...new Set(failed.map((w) => `${w.stage}: ${w.error}`))].slice(0, 8).join('\n')
@@ -439,6 +439,16 @@ function startTimer() { S.runStarted = Date.now(); stopTimer(); S.timer = setInt
 function tickTimer() { $('progressTimer').textContent = ((Date.now() - S.runStarted) / 1000).toFixed(1) + t(' ث') }
 function stopTimer() { clearInterval(S.timer); S.timer = null; tickTimer() }
 
+// the verification story of one piece, in one line: what the tiles raised, what the magnified check kept and dropped, what the close-ups added
+function showCheck(s) {
+  const e = $('checkLine')
+  if (!s || typeof s.candidates !== 'number') { e.textContent = ''; return }
+  let txt = t('🔎 البلاطات لقطت {n} مرشّح · التأكيد المكبّر أكّد {k} وشال {m}', { n: s.candidates, k: s.confirmed, m: s.dropped })
+  if (s.unsure) txt += t(' · {u} مش متأكد (قرارك)', { u: s.unsure })
+  if (s.decor) txt += t(' · التطريز عن قرب: {d}', { d: s.decor })
+  if (s.global) txt += t(' · النظرة العامة والمقارنة: {g}', { g: s.global })
+  e.textContent = txt
+}
 function showCost(res) {
   const u = res.usage || {}, tm = res.timings || {}
   const usd = ((u.input_tokens || 0) * 1.25 + (u.output_tokens || 0) * 4.25) / 1e6 + 0.0025 * (u.sam_calls || 0)
@@ -1162,7 +1172,7 @@ async function openReview(h) {
       S.img = await fromBlob(full); S.blob = full; await showPhoto(await S.img.previewUrl(1600), S.img.width, S.img.height)
     }
     S.res = { garmentBox: h.garment_box || null }; S.incomplete = h.incomplete || null      // the phone's failed model calls must not read as «clean» here either
-    S.framing = h.framing || null; showFraming(S.framing)
+    S.framing = h.framing || null; showFraming(S.framing); showCheck(h.summary || null)
     S.findings = (rows || []).map((r) => ({ id: r.id, kind: r.kind, source: r.source, type: r.type, x: r.x, y: r.y, confidence: +r.confidence || 0, level: r.level, severity: r.severity, why: r.why || '', crop_path: r.crop_path, verdict: r.verdict || null, verdict_at: r.verdict_at || null, worker_name: r.worker_name || null, stage: r.stage || null, _workerId: r.worker_name ? String((S.workers.find((w) => w.name === r.worker_name) || {}).id || '') : '', unsure: /مش متأكد|شافوها بلاطتين|خيط أم وبرة|^Not sure|two tiles|^Thread or lint/.test(r.why || '') }))
     S.decision = null
     renderAll(); renderStrip(); renderLive(); $('decisionBar').hidden = false; $('tapHint').hidden = !S.imgW
@@ -1220,7 +1230,7 @@ function resetInspection() {
   if (S.previewObjUrl) { try { URL.revokeObjectURL(S.previewObjUrl) } catch (e) { /* ignore */ } S.previewObjUrl = null }
   $('photo').removeAttribute('src'); clear($('overlay'))
   document.querySelectorAll('.btn.dec').forEach((b) => b.classList.remove('active'))
-  saveStatus(''); $('btnRetry').hidden = true; $('runError').hidden = true; $('costLine').textContent = ''
+  saveStatus(''); $('btnRetry').hidden = true; $('runError').hidden = true; $('costLine').textContent = ''; $('checkLine').textContent = ''
   $('findings').classList.remove('locked'); updateSaveEnabled()
 }
 function newPiece() {

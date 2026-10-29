@@ -156,7 +156,7 @@ export function makeDb(cfg) {
       : []),
 
     recentInspections: (limit = 12) => call('recentInspections', 'GET', restUrl('vision_inspections', {
-      select: 'id,created_at,order_number,model_code,side,photo_path,annotated_path,n_red,n_amber,decision,inspector,width,height,garment_box,incomplete:result->incomplete,framing:result->framing',   // width/height/garment_box: the review screen draws the circles on the preview
+      select: 'id,created_at,order_number,model_code,side,photo_path,annotated_path,n_red,n_amber,decision,inspector,width,height,garment_box,incomplete:result->incomplete,framing:result->framing,summary:result->summary',   // width/height/garment_box: the review screen draws the circles on the preview
       order: 'created_at.desc', limit: String(limit),
     })),
 
