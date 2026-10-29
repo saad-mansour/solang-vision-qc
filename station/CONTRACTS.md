@@ -233,13 +233,23 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   `opts.decorEffort` ('low'). A decor finding that coincides with a tile finding (same type within 150 px, or anything within 40 px) is not
   added; when it is more confident it rewrites that tile finding's type / confidence / level / why and sets `decor: true`. The station shows
   the tag «تطريز/طباعة» on cards with `source === 'decor' || decor`. Skipped when the garment stage failed or found no box.
-- **Product reference**: `db.setReference(model_code, url|null)` → `PATCH demo_orders?model_code=eq.X {reference_url}`; `listOrders` already selects
-  `reference_url`. UI: `#refBadge` (📌 next to the order), `#btnRef` in the decision bar (current piece: the review screen uses the camera
-  device's `preview.jpg` URL, the camera / single device uploads a 1600 px copy to `references/<model>/<ts>.jpg`), «⋯» `#btnRefFile` (+ `#refInput`,
-  a 1600 px copy uploaded, no inspection) and `#btnRefClear`. Every set/clear asks `confirm()`. At run time `loadReference(url)` (≤ 5 s) becomes
-  `opts.reference` (image adapter, closed after the run): the global pass compares with it (`PROMPTS.global(true)`), the close-ups get it as the
-  last reference image («a CORRECT piece of this same product») after the judged crops. Capture note: on iPhone every in-browser
+- **Product reference, one per side** (Oct 29): `db.setReference(model_code, url|null, side)` → `PATCH demo_orders?model_code=eq.X {reference_url}` for
+  `front`, `{reference_back_url}` for `back` (`sql/reference-back.sql` adds the column; `listOrders` selects it and falls back to the front-only
+  select on a 400 until it exists). The side buttons (`#sideFront` / `#sideBack`, `S.side`) pick which reference a 📌 sets or clears: `#refBadge`
+  reads «📌 وجه + ضهر», `#btnRef` in the decision bar (current piece: the review screen uses the camera device's `preview.jpg` URL, the camera /
+  single device uploads a 1600 px copy to `references/<model>/<ts>.jpg`), «⋯» `#btnRefFile` (+ `#refInput`) and `#btnRefClear` are labelled with
+  the side. Every set/clear asks `confirm()`. At run time `loadReferences(order)` (both sides in parallel, ≤ 5 s each) becomes `opts.references`
+  (`[{ image, side }]`, closed after the run): the global pass sends every reference and `refIntro(sides)` says which is which (two sides → «compare
+  with the matching side only»; one side → «if the inspected garment shows the other side, do not compare prints»); the close-ups get them as the
+  last reference images. `result.references` lists the sides used (`dev/tests/test_references.mjs`). Capture note: on iPhone every in-browser
   camera path (stream and `<input capture>`) yields 12 MP; a Camera-app photo picked with 📁 is 24 MP — the page says so under «⋯».
+- **Station setup from the tablet** (Oct 29 — the phone hangs above the table, nobody reaches it): the review screen's link bar has `#btnRemoteBg`
+  and `#btnRemoteRef` next to `#btnRemote`. They go through `requestRemote(kind, extra)` → link events `bg` / `ref` (same `req` + pairing `sig` as
+  `capture`, one request at a time, `ack` within `ACK_WAIT_MS`); the phone's `remoteCommand(kind, p)` runs `captureBackground()` (the empty-table
+  grid stays on the phone — it is the phone that compares) or `remoteReference(p)` (answers `{pending:true}` first — the tablet then waits
+  `REMOTE_PENDING_MS` — shoots, uploads under `references/<model>/`, `setReference(model, url, side)`, final `ack {url, model, side}` which the
+  tablet applies with `applyReference`). The phone's `state` carries `bg` (has an empty-table photo) → `#remoteBg` on the tablet. A framing
+  `clutter` ≥ 25 % is reported as «the empty-table photo does not match this frame (camera moved?)» instead of «something on the table».
 
 ## 7. `station/link.js` — two-device link (phone camera ⇄ review tablet)
 

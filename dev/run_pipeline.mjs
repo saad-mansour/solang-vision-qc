@@ -1,5 +1,5 @@
 // Node harness: run the full pipeline on local photos with the Meta API directly (dev key from meta_key.txt — never committed)
-// usage: node run_pipeline.mjs <photo.jpg> [--garment sweatshirt] [--ref reference.jpg] [--out dir] [--conc 6] [--bg empty-table.jpg] [--no-focus] [--no-require]
+// usage: node run_pipeline.mjs <photo.jpg> [--garment sweatshirt] [--ref front-reference.jpg] [--ref-back back-reference.jpg] [--out dir] [--conc 6] [--bg empty-table.jpg] [--no-focus] [--no-require]
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -47,7 +47,10 @@ const file = process.argv[2]
 if (!file) { console.error('usage: node run_pipeline.mjs <photo> [--garment x] [--ref y] [--out dir]'); process.exit(1) }
 const outDir = arg('--out', './out/annotated'); fs.mkdirSync(outDir, { recursive: true })
 const img = await adapter(file)
-const ref = arg('--ref', null) ? await adapter(arg('--ref')) : null
+// --ref (front) / --ref-back (back): photos of a correct piece of the same product
+const refs = []
+if (arg('--ref', null)) refs.push({ image: await adapter(arg('--ref')), side: 'front' })
+if (arg('--ref-back', null)) refs.push({ image: await adapter(arg('--ref-back')), side: 'back' })
 // --bg: a photo of the same table empty → foreground grid (only feeds the «clutter» warning)
 let fg = null
 if (arg('--bg', null)) {
@@ -57,7 +60,7 @@ if (arg('--bg', null)) {
   else console.log('  ! --bg ignored: different frame size than the photo')
 }
 const t0 = Date.now()
-const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), reference: ref, concurrency: +arg('--conc', 6) || 6, foreground: fg, tileSize: +arg('--tile', 1200) || 1200, overlap: +arg('--overlap', 200) || 200, tileEffort: arg('--tile-effort', 'low'), tilePrompt: process.argv.includes('--strict') ? 'strict' : 'recall', tilePasses: +arg('--passes', 1) || 1, decor: !process.argv.includes('--no-decor'), lang: arg('--lang', 'ar'), decorPasses: +arg('--decor-passes', 1) || 1, decorEffort: arg('--decor-effort', 'low'), focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
+const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), references: refs, concurrency: +arg('--conc', 6) || 6, foreground: fg, tileSize: +arg('--tile', 1200) || 1200, overlap: +arg('--overlap', 200) || 200, tileEffort: arg('--tile-effort', 'low'), tilePrompt: process.argv.includes('--strict') ? 'strict' : 'recall', tilePasses: +arg('--passes', 1) || 1, decor: !process.argv.includes('--no-decor'), lang: arg('--lang', 'ar'), decorPasses: +arg('--decor-passes', 1) || 1, decorEffort: arg('--decor-effort', 'low'), focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
 const name = path.basename(file).replace(/\.[^.]+$/, '')
 fs.writeFileSync(path.join(outDir, name + '.json'), JSON.stringify(res, null, 1))
 // annotate: downscale to 1600 and draw circles (red ≥0.8, amber ≥0.5, blue = global/measurement)
@@ -78,5 +81,5 @@ console.log('  focus:', res.focus ? `${res.focus.sent}/${res.focus.tiles} tiles 
 res.findings.forEach((f, i) => console.log(`  ${i + 1}. [${f.level}] ${f.source}/${f.type} ${Math.round(f.confidence * 100)}% at (${f.x},${f.y})${f.hits ? ' hits=' + f.hits : ''}${f.unsure ? ' (unsure)' : ''} — ${f.why}`))
 if (res.parts) console.log('  parts:', JSON.stringify({ part: res.parts.part, silhouette: res.parts.silhouette, mirror: res.parts.mirror && { different: res.parts.mirror.different, c: res.parts.mirror.confidence, votes: res.parts.mirror.votes } }))
 if (res.decor) console.log('  decor:', JSON.stringify(res.decor))
-if (res.summary) console.log('  verification:', JSON.stringify(res.summary))
+if (res.summary) console.log('  verification:', JSON.stringify(res.summary), res.references && res.references.length ? '· references: ' + res.references.join(' + ') : '')
 console.log('  rejected:', res.verified.filter(v => ['lint', 'texture'].includes(v.verdict)).map(v => `${v.type}@(${v.x},${v.y}) ${v.verdict}${v.second ? '+' + v.second.verdict : ''}`).join(' | ') || 'none')

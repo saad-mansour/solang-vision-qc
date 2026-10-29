@@ -44,10 +44,12 @@ only server is a thin proxy that holds the API key. The method is documented in 
    "different" before an asymmetry finding is raised (one answer alone is fooled by how the fabric is laid).
 7. **Global pass — Muse Spark.** The whole garment, downscaled, optionally next to a known-good reference: misplaced
    or incomplete print, missing part, twisted seam.
-0. **A reference per product (optional).** One photo of a correct piece, flat and from above — taken at the station
-   («📌 use this piece as the product reference», decision bar) or anywhere else and uploaded («⋯ → 📌 reference from a
-   photo»). Stored as `demo_orders.reference_url` for every order of that model; shown as 📌 next to the order. It rides
-   along in step 7 (compare with the correct piece) and step 8 (how the designs are supposed to look).
+0. **A reference per product and side (optional).** A photo of a correct piece, flat and from above — front and/or back —
+   taken at the station («📌 use this piece as the front/back reference», decision bar; or shot by the phone on the tablet's
+   command) or anywhere else and uploaded («⋯ → 📌 reference from a photo»). Stored as `demo_orders.reference_url` /
+   `reference_back_url` for every order of that model; shown as 📌 next to the order. Both sides ride along in step 7 (the
+   prompt says which is which, so the back of a hoodie is no longer «a different print» next to a front reference) and
+   step 8 (how the designs are supposed to look).
 8. **Embroidery and print close-ups — SAM 3.1 + Muse Spark.** SAM is asked for the *embroidered* and *printed* designs on
    the garment; each one (up to 4, largest first) is cut from the full-resolution photo, magnified up to 3× and inspected
    on its own for loose embroidery thread ends, skipped or broken stitches, cracked or missing print. A thread end on an

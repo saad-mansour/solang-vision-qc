@@ -8,7 +8,7 @@
 //   4. Muse Spark (verify) — each candidate is re-checked on a 2x magnified crop (lint / texture / print → not a defect)
 //   5. silhouette (from the SAM mask, no model call) — leg / sleeve length difference measured from the waist/collar center
 //   6. SAM 3.1 (parts) + Muse Spark (mirror) — left part vs mirrored right part → construction asymmetry (seams, panels, pockets)
-//   7. Muse Spark (global) — whole garment (downscaled) + optional reference → misplaced print, missing part, twisted seams
+//   7. Muse Spark (global) — whole garment (downscaled) + optional reference(s) → misplaced print, missing part, twisted seams
 // Coordinates everywhere are full-resolution photo pixels unless stated. Spark is asked for 0–1000 grid coords (its native grounding format).
 //
 // Dependencies are injected so this file has none besides ./focus.js (pure grid helpers):
@@ -30,6 +30,8 @@
 //   the run stops with result.noGarment (unless opts.requireGarment === false). opts.examples (array or Promise, ≤ 6 of
 //   {label:'defect'|'not_defect', type, note, b64}) ride along on both verify looks as labelled references from the same product.
 //   opts.foreground (foregroundGrid of the station's empty-table photo) only adds the «clutter» framing warning.
+//   opts.references ([{ image, side: 'front'|'back'|null }], ≤ 2; a bare opts.reference = one side-less entry): the correct piece of this
+//   product — the global pass compares with the matching side, the design close-ups see how the designs are supposed to look.
 
 import { garmentGrid, framingCheck, clutterPct } from './focus.js'
 
@@ -47,6 +49,23 @@ export const GARMENTS = {
   garment: { concept: 'garment', part: null, measure: null },
 }
 
+// opts.references normalized: [{ image, side }] with side 'front' | 'back' | null, at most two; a bare opts.reference (older callers) = one side-less entry
+function refList(opts) {
+  const out = (Array.isArray(opts.references) ? opts.references : []).filter(r => r && r.image && r.image.width).map(r => ({ image: r.image, side: r.side === 'front' || r.side === 'back' ? r.side : null }))
+  if (!out.length && opts.reference && opts.reference.width) out.push({ image: opts.reference, side: null })
+  return out.slice(0, 2)
+}
+// the reference piece(s) in the global prompt: which side(s) were photographed, and what to compare when the inspected garment shows the other side
+// (Oct 29: the back of a hoodie next to a front reference read as «a different print» — front and back differ by design)
+const REF_SIDE = { front: 'FRONT', back: 'BACK' }
+function refIntro(sides) {
+  if (!sides.length) return 'The image is a garment lying flat, top-down. '
+  const lead = 'Image 1 is the garment being inspected, lying flat, top-down. '
+  if (sides.length >= 2) return lead + `Images 2 and 3 are a KNOWN GOOD reference piece of the same model: image 2 its ${REF_SIDE[sides[0]] || 'first'} side, image 3 its ${REF_SIDE[sides[1]] || 'other'} side. First decide which side of the garment image 1 shows, then compare it with the matching reference side only and ignore the other one. `
+  const s = REF_SIDE[sides[0]]
+  if (!s) return lead + 'Image 2 is a KNOWN GOOD reference piece of the same model. Compare them. '
+  return lead + `Image 2 is a KNOWN GOOD reference piece of the same model, showing its ${s} side. If image 1 shows the other side of the garment, do not compare prints or decorations (front and back differ by design) — compare only what must match on both sides: colour, fabric, ribbing, shape, parts. If it shows the same side, compare them fully. `
+}
 export const PROMPTS = {
   tile: 'You are a strict garment quality inspector in a children\'s clothing factory. This is ONE TILE cut from a high-resolution top-down photo of a garment lying flat on a table. ' +
     'Look only at fabric and seams. Report REAL manufacturing defects only: hole, snag/pull, stain or discoloration, loose or hanging thread, broken/skipped/double stitching, puckering, unfinished edge. ' +
@@ -75,9 +94,7 @@ export const PROMPTS = {
     'Compare the construction: seam lines and their positions along the body, panel shapes, pocket or decoration position, stitching lines. Ignore wrinkles, lighting, shadows, how the fabric is laid, the angle of the hem/cuff edge (it depends on the lay), and differences in where the crop was cut. ' +
     'Are there real construction differences a quality inspector would reject (seams in different positions or angles, missing or extra seam, different panel shape, decoration in a different place)? ' +
     'Answer ONLY JSON: {"different":true|false,"confidence":0-1,"differences":["short description with location"],"why":"one sentence"}',
-  global: (hasRef) => 'You are a senior garment quality inspector. The garment may lie in any orientation on the table (sideways, upside down): judge the print placement and the parts relative to the garment itself (neck to hem), never relative to the photo frame — a print that reads sideways only because the garment lies sideways is correct. ' + (hasRef
-    ? 'Image 1 is the garment being inspected, lying flat, top-down. Image 2 is a KNOWN GOOD reference piece of the same model. Compare them. '
-    : 'The image is a garment lying flat, top-down. ') +
+  global: (sides) => 'You are a senior garment quality inspector. The garment may lie in any orientation on the table (sideways, upside down): judge the print placement and the parts relative to the garment itself (neck to hem), never relative to the photo frame — a print that reads sideways only because the garment lies sideways is correct. ' + refIntro(sides) +
     'Report only GLOBAL defects that need the whole garment to see: misplaced, rotated, missing or incomplete print or decoration, missing part (button, snap, drawstring, label), twisted or misaligned seam across the body, wrong proportions. ' +
     'Do not report tiny local spots (holes, threads, stains) and do not judge leg/sleeve length here. Be conservative: wrinkles, folds and how the piece is laid do not count. ' +
     'Answer ONLY JSON: {"findings":[{"type":"print|missing_part|stitching|other","x":0-1000,"y":0-1000,"confidence":0-1,"why":"one sentence"}]}. Coordinates are on a 0-1000 grid of Image 1. If none, {"findings":[]}.',
@@ -253,6 +270,7 @@ export async function inspect(img, opts) {
   const acct = (u) => { usage.input_tokens += (u && u.input_tokens) || 0; usage.output_tokens += (u && u.output_tokens) || 0; usage.calls += 1 }
   // pre-seeded so the key order stays stable even though the branches finish in any order (stages overlap; total = wall-clock)
   const timings = { garment: 0, tiles: 0, verify: 0, silhouette: 0, parts: 0, global: 0, total: 0 }
+  const refs = refList(opts)   // the correct piece of this product: [{ image, side }], ≤ 2 (see refIntro)
   const W = img.width, H = img.height
   const g = GARMENTS[opts.garment] || GARMENTS.garment
   const conc = opts.concurrency || 6   // tiles and verify (branch L). Branch G is sequential except the 2 mirror calls → never more than 3 at once
@@ -414,12 +432,12 @@ export async function inspect(img, opts) {
         const dex = sel.length ? await resolveExamples(opts.examples) : []
         let dRefText = dex.length ? PROMPTS.verifyRefs(dex.length) + dex.map((e, i) => `Image ${i + 1}: ${e.label === 'defect' ? 'DEFECT' : 'NOT A DEFECT'}${e.type ? ' (' + e.type + ')' : ''}`).join('; ') + '. ' : ''
         const dRefImgs = dex.map(e => e.b64)
-        // the product's correct piece (opts.reference), whole garment at ≤ 1000 px: how the designs are supposed to look — intended strokes stop reading as flaws
-        if (sel.length && opts.reference) {
+        // the product's correct piece (opts.references: front and/or back), whole garment at ≤ 1000 px: how the designs are supposed to look — intended strokes stop reading as flaws
+        for (const ref of sel.length ? refs : []) {
           try {
-            const R = opts.reference, rs = Math.min(1, 1000 / Math.max(R.width, R.height))
+            const R = ref.image, rs = Math.min(1, 1000 / Math.max(R.width, R.height))
             dRefImgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) }, quality: JQ }))
-            dRefText += `Image ${dRefImgs.length} is a CORRECT piece of this same product (whole garment, approved reference): the designs on it show how they are supposed to look — a stroke that exists there is intended. `
+            dRefText += `Image ${dRefImgs.length} is a CORRECT piece of this same product (whole garment, approved reference${REF_SIDE[ref.side] ? ', its ' + REF_SIDE[ref.side] + ' side' : ''}): the designs on it show how they are supposed to look — a stroke that exists there is intended${refs.length > 1 ? '; use the side that matches the inspected garment' : ''}. `
           } catch (e) { warn('decor', e) }
         }
         await mapLimit(sel, 4, async (b) => {
@@ -517,12 +535,11 @@ export async function inspect(img, opts) {
         const gs = Math.min(1, gMax / Math.max(region.w, region.h))
         const b64 = await img.jpeg({ ...region, resize: { w: Math.round(region.w * gs), h: Math.round(region.h * gs) }, quality: JQ })
         const imgs = [b64]
-        if (opts.reference) {
-          const R = opts.reference
-          const rs = Math.min(1, gMax / Math.max(R.width, R.height))
-          imgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) } }))
+        for (const ref of refs) {                                   // front and/or back of the correct piece — the prompt says which is which
+          const R = ref.image, rs = Math.min(1, gMax / Math.max(R.width, R.height))
+          imgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) }, quality: JQ }))
         }
-        const r = await spark(api, PROMPTS.global(!!opts.reference) + WL, imgs, 'low')
+        const r = await spark(api, PROMPTS.global(refs.map(r => r.side)) + WL, imgs, 'low')
         acct(r.usage)
         globalFindings = ((r.json && r.json.findings) || []).map(f => { const c = clamp(+f.confidence || 0, 0, 1); return { kind: 'global', source: 'global', type: String(f.type || 'other'), ...gridToPx(f.x, f.y, region), confidence: c, level: level(c), severity: 'major', why: f.why || '' } }).filter(f => f.confidence >= LEVELS.amber)
       } catch (e) { warn('global', e) }
@@ -553,7 +570,7 @@ export async function inspect(img, opts) {
     global: gFindings.filter(f => f.source !== 'decor').length,
   }
   return {
-    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...gFindings], parts: G.parts, decor: G.decor, summary, usage, timings,
+    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...gFindings], parts: G.parts, decor: G.decor, summary, references: refs.map(r => r.side || 'any'), usage, timings,
     framing, focus: focus ? { tiles: L.allTiles, sent: L.tileResults.length, skipped: L.allTiles - L.tileResults.length, droppedOutside: L.droppedOutside, painted: paint, marginPx: focus.margin * focus.cell } : null,
   }
 }

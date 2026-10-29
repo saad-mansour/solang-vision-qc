@@ -149,6 +149,8 @@ function wire() {
   $('btnNew').addEventListener('click', newPiece)
   $('btnBack').addEventListener('click', newPiece)
   $('btnRemote').addEventListener('click', requestRemoteCapture)
+  $('btnRemoteBg').addEventListener('click', requestRemoteBg)
+  $('btnRemoteRef').addEventListener('click', requestRemoteRef)
   $('btnLive').addEventListener('click', toggleLive)
   $('btnCamStart').addEventListener('click', () => startCamera())
   document.querySelectorAll('.btn.sample').forEach((b) => b.addEventListener('click', () => runSample(b.dataset.sample, b.dataset.order)))
@@ -160,7 +162,7 @@ function wire() {
   // overlay alignment needs no JS on resize: the svg is positioned on the same box as the <img> (see style.css .photoWrap)
 }
 
-function setSide(side) { S.side = side; $('sideFront').classList.toggle('active', side === 'front'); $('sideBack').classList.toggle('active', side === 'back') }
+function setSide(side) { S.side = side; $('sideFront').classList.toggle('active', side === 'front'); $('sideBack').classList.toggle('active', side === 'back'); renderRef() }   // the reference buttons follow the side
 
 function renderOrders(list) {
   S.orders = list || []; const sel = $('orderSel'); clear(sel)
@@ -174,18 +176,27 @@ function renderOrders(list) {
 // ── the product's reference photo: a correct piece, flat, from above (demo_orders.reference_url, one per model_code) ────────────
 // Set from the piece on the screen («📌 اعتمدها مرجع للموديل», decision bar) or from a photo file («⋯ → 📌 مرجع من صورة», no inspection).
 // Used by the global pass (compare with the correct piece) and by the embroidery / print close-ups (how the designs should look).
+// One reference per SIDE of the product (Saad, Oct 29: the back of a hoodie next to the front reference read as «a different print»).
+// The side buttons (وجه / ضهر) pick which reference a 📌 sets or clears; the run sends both sides and the prompt says which is which.
+const REF_COL = { front: 'reference_url', back: 'reference_back_url' }
+const refUrl = (o, side) => (o && o[REF_COL[side] || 'reference_url']) || null
 function renderRef() {
-  const has = !!(S.order && S.order.reference_url)
-  $('refBadge').hidden = !has; $('btnRefClear').hidden = !has
-  $('btnRef').hidden = !(S.order && S.order.model_code && S.view === 'inspect' && (S.img || S.reviewId) && !S.running)
+  const o = S.order, f = !!refUrl(o, 'front'), b = !!refUrl(o, 'back'), side = SIDE_AR[S.side]
+  $('refBadge').hidden = !(f || b); $('refBadge').textContent = '📌 ' + [f ? SIDE_AR.front : '', b ? SIDE_AR.back : ''].filter(Boolean).join(' + ')
+  $('btnRefClear').hidden = !refUrl(o, S.side); $('btnRefClear').textContent = t('📌 شيل مرجع {side}', { side })
+  $('btnRef').hidden = !(o && o.model_code && S.view === 'inspect' && (S.img || S.reviewId) && !S.running)
+  $('btnRef').textContent = t('📌 اعتمدها مرجع {side} للموديل', { side })
+  $('btnRefFile').textContent = t('📌 مرجع {side} من صورة', { side })
+  $('btnRemoteRef').textContent = t('📌 صوّر مرجع {side} من الموبايل', { side })
 }
-function applyReference(modelCode, url) {
-  S.orders.forEach((o) => { if (o.model_code === modelCode) o.reference_url = url })
+function applyReference(modelCode, url, side) {
+  const col = REF_COL[side] || 'reference_url'
+  S.orders.forEach((o) => { if (o.model_code === modelCode) o[col] = url })
   renderRef()
 }
-async function storeReference(modelCode, url) {
-  await S.db.setReference(modelCode, url); applyReference(modelCode, url)
-  toast(url ? t('📌 انحفظ المرجع للموديل {m}', { m: modelCode }) : t('انشال مرجع الموديل'))
+async function storeReference(modelCode, url, side) {
+  await S.db.setReference(modelCode, url, side); applyReference(modelCode, url, side)
+  toast(url ? t('📌 انحفظ مرجع {side} للموديل {m}', { m: modelCode, side: SIDE_AR[side] }) : t('انشال مرجع {side} للموديل', { side: SIDE_AR[side] }))
 }
 // a 1600 px copy of an image adapter, uploaded under references/<model>/ → its public URL
 async function uploadReferenceFrom(img, modelCode) {
@@ -194,27 +205,27 @@ async function uploadReferenceFrom(img, modelCode) {
 }
 async function setReferenceFromCurrent() {
   const o = S.order; if (!o || !o.model_code || !S.db) { toast(t('ما في طلبية مختارة')); return }
-  if (!confirm(t('تعتمد هالقطعة صورة مرجعية صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code }))) return
+  if (!confirm(t('تعتمد هالقطعة مرجع {side} صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code, side: SIDE_AR[S.side] }))) return
   try {
     toast(t('عم أحفظ المرجع…'))
     let url = null
     if (S.reviewId && S.reviewPhotoUrl) url = S.reviewPhotoUrl.replace(/photo\.jpg$/, 'preview.jpg')   // review screen: the camera device already uploaded the preview
     else if (S.img) url = await uploadReferenceFrom(S.img, o.model_code)
     if (!url) { toast(t('ما في صورة لاعتمادها')); return }
-    await storeReference(o.model_code, url)
+    await storeReference(o.model_code, url, S.side)
   } catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) }
 }
 async function setReferenceFromFile(file) {
   const o = S.order; if (!o || !o.model_code || !S.db) { toast(t('ما في طلبية مختارة')); return }
-  if (!confirm(t('تعتمد هالصورة مرجع صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code }))) return
+  if (!confirm(t('تعتمد هالصورة مرجع {side} صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code, side: SIDE_AR[S.side] }))) return
   let img = null
-  try { toast(t('عم أحفظ المرجع…')); img = await fromBlob(file); await storeReference(o.model_code, await uploadReferenceFrom(img, o.model_code)) }
+  try { toast(t('عم أحفظ المرجع…')); img = await fromBlob(file); await storeReference(o.model_code, await uploadReferenceFrom(img, o.model_code), S.side) }
   catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) } finally { safeClose(img) }
 }
 async function clearReference() {
   const o = S.order; if (!o || !o.model_code || !S.db) return
-  if (!confirm(t('تشيل الصورة المرجعية للموديل {m}؟', { m: o.model_code }))) return
-  try { await storeReference(o.model_code, null) } catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) }
+  if (!confirm(t('تشيل مرجع {side} للموديل {m}؟', { m: o.model_code, side: SIDE_AR[S.side] }))) return
+  try { await storeReference(o.model_code, null, S.side) } catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) }
 }
 // the reference photo as an image adapter for the pipeline (≤ 5 s, anything wrong → none)
 async function loadReference(url) {
@@ -225,6 +236,11 @@ async function loadReference(url) {
     if (!r.ok) throw new Error('HTTP ' + r.status)
     return await fromBlob(await r.blob())
   } catch (e) { return null }
+}
+// both sides of the product's correct piece, fetched side by side → [{ image, side }] for the pipeline (missing / broken → left out)
+async function loadReferences(order) {
+  const pairs = await Promise.all(['front', 'back'].map(async (side) => ({ image: await loadReference(refUrl(order, side)), side })))
+  return pairs.filter((p) => p.image)
 }
 
 async function refreshStats() {
@@ -354,7 +370,7 @@ async function runInspection(blob, sourceLabel) {
   S.blob = blob; S.source = sourceLabel
   const controller = new AbortController(); S.controller = controller
   const order = S.order
-  let reference = null
+  let refs = []
   S.warns = []; S.tilesDone = 0; S.progL = ''; S.progG = ''; $('progressWarn').textContent = ''; $('progressWarn').title = ''
   $('progress').hidden = false; $('btnCancel').hidden = false; $('runError').hidden = true; $('costLine').textContent = ''
   setProgress(t('عم جهّز الصورة…')); startTimer()
@@ -365,11 +381,11 @@ async function runInspection(blob, sourceLabel) {
     // references for the verifier (fetched while SAM runs) and the empty-table comparison (local, no model call)
     const examples = (S.db && order && order.model_code) ? loadExamples(order.model_code) : []
     const foreground = await foregroundFor(img)
-    reference = await loadReference(order && order.reference_url)   // the product's correct piece, for the global pass and the design close-ups
+    refs = await loadReferences(order)   // the product's correct piece (front / back), for the global pass and the design close-ups
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, reference, requireGarment: true, lang: LANG, tilePasses: S.sampleRun ? 1 : 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, references: refs, requireGarment: true, lang: LANG, tilePasses: S.sampleRun ? 1 : 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress(t('انلغى الفحص')); return }
@@ -395,7 +411,7 @@ async function runInspection(blob, sourceLabel) {
     if (controller.signal.aborted) setProgress(t('انلغى الفحص'))
     else { setProgress(t('وقف الفحص')); $('runErrorText').textContent = msg(e) + (e && e.stack && !String(e.stack).startsWith(msg(e)) ? '\n' + e.stack : ''); $('runError').hidden = false }
   } finally {
-    stopTimer(); S.running = false; S.controller = null; $('btnCancel').hidden = true; safeClose(reference)
+    stopTimer(); S.running = false; S.controller = null; $('btnCancel').hidden = true; refs.forEach((r) => safeClose(r.image))
     sendState(); renderRef()
     // cards are refreshed here (after running=false) so a cancel / error / undecodable photo shows a way out instead of a stale «عم فحص…»
     if (S.view === 'inspect') { renderCards(); $('decisionBar').hidden = false; updateSaveEnabled(); $('tapHint').hidden = !S.img }
@@ -479,7 +495,8 @@ function framingText(f) {
   const parts = []
   if (f.cut && f.cut.length) parts.push(t('القطعة طالعة برّا الكادر من {sides}', { sides: f.cut.map((s) => SIDE_WORD[s] || s).join(t(' و')) }))
   if (f.small) parts.push(t('القطعة صغيرة بالصورة ({p}٪) — قرّب الكاميرا', { p: f.areaPct }))
-  if (f.clutter) parts.push(t('في شي غير القطعة عالطاولة (إيد / عصاية / غرض) — شيلو'))
+  if (f.clutter >= 25) parts.push(t('صورة الطاولة الفاضية ما بتطابق الكادر ({p}٪ مختلف — الكاميرا تحركت؟) — عيد 🧹 أو شيلها', { p: Math.round(f.clutter) }))   // Oct 29: 40–53 % on every hand-held piece — that is the camera, not an object
+  else if (f.clutter) parts.push(t('في شي غير القطعة عالطاولة (إيد / عصاية / غرض) — شيلو'))
   return parts.length ? '⚠ ' + parts.join(' · ') : ''
 }
 function showFraming(f) { const txt = framingText(f); $('frameWarn').textContent = txt; $('frameWarn').hidden = !txt }
@@ -527,9 +544,9 @@ function grayOf(bitmap) {
   freeCanvas(c)
   return { w, h, gray: g }
 }
-async function captureBackground() {
-  if (S.running || S.capturing) { toast(t('في فحص شغّال — استنّي يخلص')); return }
-  if (!S.cam) { toast(t('ما في كاميرا — ما فيني صوّر الطاولة')); return }
+async function captureBackground() {                     // → null when stored, else the reason (shown here, and sent back to the tablet)
+  if (S.running || S.capturing) { const m = t('في فحص شغّال — استنّي يخلص'); toast(m); return m }
+  if (!S.cam) { const m = t('ما في كاميرا — ما فيني صوّر الطاولة'); toast(m); return m }
   S.capturing = true
   try {
     const img = await fromBlob(await takePhoto(S.cam, $('video')))
@@ -539,10 +556,11 @@ async function captureBackground() {
       lsSet(bgKey(), JSON.stringify({ w: g.w, h: g.h, g: btoa(bin), at: new Date().toISOString() }))
       if (!loadBg()) throw new Error(t('التخزين المحلي رفض الحفظ'))
     } finally { safeClose(img) }
-    toast(t('✓ انحفظت صورة الطاولة الفاضية — صار يعرف شو مش قطعة')); renderBgStatus()
-  } catch (e) { toast(t('ما قدرت صوّر الطاولة: ') + msg(e)) } finally { S.capturing = false }
+    toast(t('✓ انحفظت صورة الطاولة الفاضية — صار يعرف شو مش قطعة')); renderBgStatus(); sendState()
+    return null
+  } catch (e) { toast(t('ما قدرت صوّر الطاولة: ') + msg(e)); return msg(e) } finally { S.capturing = false }
 }
-function clearBackground() { try { localStorage.removeItem(bgKey()) } catch (e) { /* ignore */ } renderBgStatus(); toast(t('انمسحت صورة الطاولة الفاضية')) }
+function clearBackground() { try { localStorage.removeItem(bgKey()) } catch (e) { /* ignore */ } renderBgStatus(); sendState(); toast(t('انمسحت صورة الطاولة الفاضية')) }
 function renderBgStatus() {
   const bg = loadBg(), s = $('bgStatus')
   s.textContent = bg ? t('الطاولة الفاضية محفوظة ({date} {time})', { date: ymd(new Date(bg.at)), time: hhmm(bg.at) }) : t('اختياري: صوّر الطاولة وهي فاضية مرة، فبيعرف شو مش قطعة (إيد، عصاية، غرض)')
@@ -978,7 +996,7 @@ function camState() { return (S.running || S.capturing) ? 'running' : (S.job && 
 function sendState() {
   if (!S.link || !S.linkUp) return
   if (MODE === 'camera') S.link.send('state', { role: 'camera', device: S.inspector || '', state: camState(), note: S.running ? [$('progressText').textContent, framingText(S.framing)].filter(Boolean).join(' · ') : '', lastId: S.lastSavedId, boot: S.boot, viewers: S.live ? S.live.viewers() : 0,
-    err: S.incomplete ? t('الفحص ما كمل عالموبايل — ') + String((S.warns[0] && S.warns[0].error) || '').slice(0, 80) : S.noGarment ? t('ما لقيت قطعة بالكادر') : '', code: !!linkCode() })
+    err: S.incomplete ? t('الفحص ما كمل عالموبايل — ') + String((S.warns[0] && S.warns[0].error) || '').slice(0, 80) : S.noGarment ? t('ما لقيت قطعة بالكادر') : '', code: !!linkCode(), bg: !!loadBg() })
   else if (MODE === 'review') S.link.send('state', { role: 'review', by: S.inspector || '' })
 }
 function onLinkMessage(event, p) {
@@ -991,12 +1009,21 @@ function onLinkMessage(event, p) {
     }
     return
   }
-  if (MODE === 'camera' && event === 'capture') { remoteCapture(p); return }
+  if (MODE === 'camera' && (event === 'capture' || event === 'bg' || event === 'ref')) { remoteCommand(event, p); return }
   if (MODE !== 'review') return
   if (event === 'ack' && S.capReq && p.req === S.capReq.req) {
-    clearTimeout(S.capReq.timer); S.capReq = null
-    toast(p.ok ? t('📷 الموبايل عم يصوّر…') : t('الموبايل ما صوّر: ') + (p.reason || '')); renderLink()
-    if (p.ok) { freezeLive(); S.liveWanted = false }           // hold the shot instead of the moving feed, and stop the stream: the phone's Wi-Fi now carries the uploads
+    const kind = S.capReq.kind; clearTimeout(S.capReq.timer)
+    if (p.ok && p.pending) { S.capReq.timer = remoteTimeout(p.req, REMOTE_PENDING_MS); toast(t('📷 الموبايل عم يصوّر المرجع ويرفعو…')); return }   // the reference upload takes a while
+    S.capReq = null
+    if (kind === 'bg') toast(p.ok ? t('✓ الموبايل صوّر الطاولة الفاضية وحفظها') : t('الموبايل ما صوّر الطاولة: ') + (p.reason || ''), 4000)
+    else if (kind === 'ref') {
+      if (p.ok && p.url && p.model) { applyReference(String(p.model), String(p.url), p.side === 'back' ? 'back' : 'front'); toast(t('📌 الموبايل صوّر المرجع وانحفظ: مرجع {side} للموديل {m}', { m: p.model, side: SIDE_AR[p.side] || '' }), 4000) }
+      else toast(t('الموبايل ما صوّر المرجع: ') + (p.reason || ''), 4000)
+    } else {
+      toast(p.ok ? t('📷 الموبايل عم يصوّر…') : t('الموبايل ما صوّر: ') + (p.reason || ''))
+      if (p.ok) { freezeLive(); S.liveWanted = false }           // hold the shot instead of the moving feed, and stop the stream: the phone's Wi-Fi now carries the uploads
+    }
+    renderLink()
   } else if (event === 'saved') reviewTick()
 }
 // The tablet may hear several camera pages on one station (an old tab left open, the home-screen copy, a second phone): they alternate every
@@ -1024,27 +1051,55 @@ function renderTwin() {
   else if (m.textContent.startsWith('⚠')) m.hidden = true
 }
 
-// the tablet asked for a shot: answer at once, revive the camera if it had stopped, leave the previous piece (its upload goes on detached), shoot
-async function remoteCapture(p) {
-  const reply = (ok, reason) => { if (S.link) S.link.send('ack', { req: p.req, ok, reason: reason || null }) }
+// the tablet asked for a shot (capture), the empty-table photo (bg) or a reference photo (ref): answer at once, revive the camera if it had
+// stopped, leave the previous piece (its upload goes on detached), then act
+async function remoteCommand(kind, p) {
+  const reply = (ok, reason, extra) => { if (S.link) S.link.send('ack', { ...(extra || {}), req: p.req, ok, reason: reason || null }) }
   if (!p || !p.req || S.seenReq.has(p.req)) return                                       // replayed or malformed: ignored
   S.seenReq.add(p.req); if (S.seenReq.size > 300) S.seenReq.delete(S.seenReq.values().next().value)
   if (!(await linkOk(p))) { reply(false, t('رمز الربط مش مطابق — كبسي على سطر الحالة لتكتبيه')); return }
-  if (Date.now() - S.lastRemoteShot < REMOTE_MIN_MS) { reply(false, t('استنّي كم ثانية بين لقطة ولقطة')); return }
+  if (kind === 'capture' && Date.now() - S.lastRemoteShot < REMOTE_MIN_MS) { reply(false, t('استنّي كم ثانية بين لقطة ولقطة')); return }
   if (S.running || S.capturing) { reply(false, t('في فحص شغّال — استنّي يخلص')); return }
   if (!S.cam && !S.camStarting) await startCamera()
   for (let i = 0; i < 25 && S.camStarting; i++) await new Promise((r) => setTimeout(r, 200))   // a camera that is just (re)starting gets up to 5 s
   if (!S.cam) { reply(false, t('الكاميرا مش شغّالة عالموبايل')); return }
   if (S.view !== 'camera') { resetInspection(); setView('camera'); renderCards() }
+  if (kind === 'bg') { await new Promise((r) => setTimeout(r, 350)); const err = await captureBackground(); reply(!err, err); return }   // stored on THIS device: the phone is the one that compares
+  if (kind === 'ref') { reply(true, null, { pending: true }); setTimeout(() => remoteReference(p, reply), 350); return }
   reply(true); sendState(); S.lastRemoteShot = Date.now()
   setTimeout(() => captureFromCamera(t('من شاشة المراجعة')), 350)      // let the live view paint a frame after the panel switch
 }
-async function requestRemoteCapture() {
+// «📌 صوّر مرجع … من الموبايل»: shoot, upload a 1600 px copy under references/<model>/, store it for that side — the tablet gets the URL in the final ack
+async function remoteReference(p, reply) {
+  const model = String(p.model || ''), side = p.side === 'back' ? 'back' : 'front'
+  if (!model || !S.db) { reply(false, t('ما في طلبية مختارة')); return }
+  if (S.running || S.capturing || !S.cam) { reply(false, t('في فحص شغّال — استنّي يخلص')); return }
+  S.capturing = true; let img = null
+  try {
+    img = await fromBlob(await takePhoto(S.cam, $('video')))
+    const url = await uploadReferenceFrom(img, model)
+    await S.db.setReference(model, url, side); applyReference(model, url, side)
+    toast(t('📌 انحفظ مرجع {side} للموديل {m}', { m: model, side: SIDE_AR[side] })); reply(true, null, { url, model, side })
+  } catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000); reply(false, msg(e)) } finally { S.capturing = false; safeClose(img); sendState() }
+}
+// a request to the phone (capture / bg / ref): one at a time, signed with the pairing code, answered with «ack» — a «pending» ack buys the phone
+// REMOTE_PENDING_MS more (the reference photo is uploaded before the final answer)
+const REMOTE_PENDING_MS = 30000
+const remoteTimeout = (req, ms = ACK_WAIT_MS) => setTimeout(() => { if (S.capReq && S.capReq.req === req) { S.capReq = null; toast(t('الموبايل ما ردّ — تأكدي إنو صفحة الكاميرا مفتوحة عليه')); renderLink() } }, ms)
+async function requestRemote(kind, extra) {
   if (!S.link || !S.linkUp || S.capReq) return
   const req = Math.random().toString(36).slice(2) + Date.now().toString(36)
-  if (!S.link.send('capture', { req, by: S.inspector || '', sig: await linkSig(req) })) { toast(t('ما في اتصال بالموبايل')); return }
-  S.capReq = { req, timer: setTimeout(() => { if (S.capReq && S.capReq.req === req) { S.capReq = null; toast(t('الموبايل ما ردّ — تأكدي إنو صفحة الكاميرا مفتوحة عليه')); renderLink() } }, ACK_WAIT_MS) }
+  if (!S.link.send(kind, { ...(extra || {}), req, by: S.inspector || '', sig: await linkSig(req) })) { toast(t('ما في اتصال بالموبايل')); return }
+  S.capReq = { req, kind, timer: remoteTimeout(req) }
   renderLink()
+}
+function requestRemoteCapture() { return requestRemote('capture') }
+// the tablet drives the station setup too (Saad, Oct 29: the phone hangs above the table, the tablet is below — nobody reaches the phone)
+function requestRemoteBg() { if (confirm(t('الطاولة فاضية هلق تحت الموبايل؟ بيصوّرها وبيحفظها عالموبايل'))) requestRemote('bg') }
+function requestRemoteRef() {
+  const o = S.order; if (!o || !o.model_code) { toast(t('ما في طلبية مختارة')); return }
+  if (!confirm(t('القطعة الصح للموديل {m} ({side}) تحت الموبايل هلق؟ بيصوّرها وبيعتمدها مرجع (بتنبدّل القديمة إذا في)', { m: o.model_code, side: SIDE_AR[S.side] }))) return
+  requestRemote('ref', { model: o.model_code, side: S.side })
 }
 // WebRTC signaling rides on the link (live.js): the tablet asks, the phone offers, the tablet answers
 function onRtc(event, p) {
@@ -1123,6 +1178,8 @@ function renderLink() {
   if (linkCode()) txt += ' 🔑'; else if (alive && S.peer.code) txt += t(' · الموبايل بدو رمز ربط — كبسي هون لتكتبيه')
   if (alive && S.peers.size > 1) txt += t(' · ⚠ في {n} صفحات كاميرا على هالمحطة — سكّري الزيادة', { n: S.peers.size })
   $('linkText').textContent = txt; $('linkBar').className = 'linkBar ' + cls; $('btnRemote').disabled = !on
+  $('btnRemoteBg').disabled = !on; $('btnRemoteRef').disabled = !on || !(S.order && S.order.model_code)
+  $('remoteBg').textContent = alive && st !== 'nocam' ? (S.peer.bg ? t('🧹 الطاولة الفاضية محفوظة عالموبايل') : t('🧹 ما في صورة طاولة فاضية عالموبايل — اختياري')) : ''
   $('btnLive').disabled = !alive || st === 'nocam' || !(S.live && S.live.supported())
 }
 

@@ -98,6 +98,11 @@
         <button type="button" id="btnRemote" class="btn primary big" disabled>📸 افحص القطعة يلي تحت الكاميرا</button>
         <!-- the live view is on demand (Saad, Oct 28): it costs phone battery and Wi-Fi while the uploads run — a tap opens it for 90 s, a shot closes it -->
         <button type="button" id="btnLive" class="btn small" disabled>📡 شوف الكاميرا</button>
+        <!-- the tablet drives the station setup too (Saad, Oct 29: the phone hangs above the table, the tablet is below): the empty-table photo
+             is taken and kept on the phone; the reference photo is shot by the phone and stored for the side chosen here (وجه / ضهر) -->
+        <button type="button" id="btnRemoteBg" class="btn small" disabled>🧹 صوّر الطاولة فاضية من الموبايل</button>
+        <button type="button" id="btnRemoteRef" class="btn small" disabled>📌 صوّر المرجع من الموبايل</button>
+        <span id="remoteBg" class="bgStatus"></span>
         <!-- live view of the phone camera (WebRTC, same Wi-Fi only — station/live.js); small tile while a piece is open, tap to enlarge -->
         <div id="liveWrap" class="liveWrap" hidden>
           <video id="liveView" autoplay muted playsinline></video>

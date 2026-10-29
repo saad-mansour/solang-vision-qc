@@ -11,7 +11,8 @@ create table if not exists demo_orders (
   garment      text not null default 'garment',   -- pipeline garment key: sweatshirt | pants | tshirt | hoodie ...
   color        text,
   line         text,                    -- sewing line
-  reference_url text,                   -- known-good reference photo (storage URL)
+  reference_url text,                   -- known-good reference photo, FRONT side (storage URL)
+  reference_back_url text,              -- the same for the BACK side (Oct 29) — a side-less older row keeps its front photo
   created_at   timestamptz default now()
 );
 

@@ -115,9 +115,12 @@ export function makeDb(cfg) {
   }
 
   const db = {
-    listOrders: () => call('listOrders', 'GET', restUrl('demo_orders', {
-      select: 'order_number,model_code,product,garment,color,line,reference_url', order: 'order_number.asc',
-    })),
+    // reference_back_url arrived on Oct 29 (sql/reference-back.sql): until that column exists the list is read without it (front reference only)
+    listOrders: async () => {
+      const url = (back) => restUrl('demo_orders', { select: 'order_number,model_code,product,garment,color,line,reference_url' + (back ? ',reference_back_url' : ''), order: 'order_number.asc' })
+      try { return await call('listOrders', 'GET', url(true)) }
+      catch (e) { if (e.status === 400 && /reference_back_url/.test(e.message)) return call('listOrders', 'GET', url(false)); throw e }
+    },
 
     listWorkers: () => call('listWorkers', 'GET', restUrl('demo_workers', { select: 'id,name,line,stage', order: 'line.asc,id.asc' })),
 
@@ -127,10 +130,12 @@ export function makeDb(cfg) {
     })),
 
     // → the updated row, or null when no row has that id
-    // the known-good reference photo of a product: demo_orders.reference_url on every order of that model_code (null clears it)
-    setReference: async (modelCode, url) => {
+    // the known-good reference photo of a product, one per side: demo_orders.reference_url (front) / reference_back_url (back) on every order
+    // of that model_code (null clears it)
+    setReference: async (modelCode, url, side = 'front') => {
       if (!modelCode) throw new Error('setReference: model_code required')
-      return call('setReference', 'PATCH', restUrl('demo_orders', { model_code: 'eq.' + modelCode }), { body: { reference_url: url || null }, prefer: 'return=minimal' })
+      const col = side === 'back' ? 'reference_back_url' : 'reference_url'
+      return call('setReference', 'PATCH', restUrl('demo_orders', { model_code: 'eq.' + modelCode }), { body: { [col]: url || null }, prefer: 'return=minimal' })
     },
     updateInspection: async (id, patch) => {
       needId('updateInspection', id)
