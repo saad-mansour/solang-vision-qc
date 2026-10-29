@@ -244,6 +244,8 @@ const WHY = {
 export async function inspect(img, opts) {
   const WT = WHY[opts && opts.lang === 'en' ? 'en' : 'ar']
   const JQ = (opts && opts.jpegQuality) || 0.85           // JPEG quality of what goes to the models: ~20 % fewer bytes than 0.9, no defect lost in the 7-photo set
+  // the free-text reasons («why», «differences») in the inspector's language; JSON keys and the fixed values stay English (the code matches them)
+  const WL = opts && opts.lang === 'en' ? '' : ' Write every "why" and "differences" text in simple Arabic; keep all JSON keys and the fixed values (type, verdict, severity) in English exactly as specified.'
   const t0 = Date.now()
   const { api } = opts
   const progress = opts.onProgress || (() => {})
@@ -322,7 +324,7 @@ export async function inspect(img, opts) {
         // opts.tilePasses > 1: the same tile is asked again (independent samples) — the tile pass is stochastic, a spot missed once is often seen the second time;
         // duplicates merge below (mergeCandidates), a spot seen twice counts as two hits
         const passes = Math.max(1, Math.min(3, opts.tilePasses || 1))
-        const rs = await Promise.all(Array.from({ length: passes }, () => spark(api, opts.tilePrompt === 'strict' ? PROMPTS.tile : PROMPTS.tileRecall, [b64], opts.tileEffort || 'low')))   // minimal was faster but missed a known hole 1 run in 3
+        const rs = await Promise.all(Array.from({ length: passes }, () => spark(api, (opts.tilePrompt === 'strict' ? PROMPTS.tile : PROMPTS.tileRecall) + WL, [b64], opts.tileEffort || 'low')))   // minimal was faster but missed a known hole 1 run in 3
         const r = { usage: rs.reduce((a, x) => ({ input_tokens: (a.input_tokens || 0) + ((x.usage || {}).input_tokens || 0), output_tokens: (a.output_tokens || 0) + ((x.usage || {}).output_tokens || 0) }), {}), json: { defects: rs.flatMap((x) => ((x.json && x.json.defects) || [])) }, calls: passes }
         acct(r.usage); usage.calls += passes - 1
         const defects = ((r.json && r.json.defects) || []).map(d => ({ ...gridToPx(d.x, d.y, abs), type: String(d.type || 'other'), confidence: clamp(+d.confidence || 0, 0, 1), why: d.why || '' }))
@@ -349,7 +351,7 @@ export async function inspect(img, opts) {
       const abs = { x: Math.round(x), y: Math.round(y), w: Math.min(win, W), h: Math.min(win, H) }
       try {
         const b64 = await img.jpeg({ ...abs, resize: { w: 1000, h: Math.round(1000 * abs.h / abs.w) }, quality: JQ })
-        const r = await spark(api, refText + PROMPTS.verify, [...refImgs, b64], 'low')   // the references ride along on both looks
+        const r = await spark(api, refText + PROMPTS.verify + WL, [...refImgs, b64], 'low')   // the references ride along on both looks
         acct(r.usage)
         let j = r.json || {}
         const norm = (o) => ['defect', 'lint', 'texture', 'unsure'].includes(o.verdict) ? o.verdict : (o.defect === true ? 'defect' : 'unsure')
@@ -360,7 +362,7 @@ export async function inspect(img, opts) {
           const x3 = clamp(c.x - w3 / 2, 0, Math.max(0, W - w3)), y3 = clamp(c.y - w3 / 2, 0, Math.max(0, H - w3))
           const abs3 = { x: Math.round(x3), y: Math.round(y3), w: Math.min(w3, W), h: Math.min(w3, H) }
           const b3 = await img.jpeg({ ...abs3, resize: { w: 1000, h: Math.round(1000 * abs3.h / abs3.w) }, quality: JQ })
-          const r3 = await spark(api, refText + PROMPTS.verify, [...refImgs, b3], 'low')   // same references: a not_defect example must be able to veto the 3x look too
+          const r3 = await spark(api, refText + PROMPTS.verify + WL, [...refImgs, b3], 'low')   // same references: a not_defect example must be able to veto the 3x look too
           acct(r3.usage)
           second = r3.json || {}
           if (norm(second) === 'defect') { j = second; verdict = 'defect' }
@@ -430,7 +432,7 @@ export async function inspect(img, opts) {
             const b64 = await img.jpeg({ ...abs, resize: { w: Math.round(abs.w * up), h: Math.round(abs.h * up) }, quality: JQ })
             // opts.decorPasses (default 1): independent looks at the same design; opts.decorEffort (default 'low')
             const dp = Math.max(1, Math.min(3, opts.decorPasses || 1))
-            const rs = await Promise.all(Array.from({ length: dp }, () => spark(api, dRefText + PROMPTS.decor, [...dRefImgs, b64], opts.decorEffort || 'low')))
+            const rs = await Promise.all(Array.from({ length: dp }, () => spark(api, dRefText + PROMPTS.decor + WL, [...dRefImgs, b64], opts.decorEffort || 'low')))
             rs.forEach((x) => acct(x.usage))
             const r = { json: { defects: rs.flatMap((x) => ((x.json && x.json.defects) || [])) } }
             for (const d of ((r.json && r.json.defects) || [])) {
@@ -442,7 +444,7 @@ export async function inspect(img, opts) {
         })
         // two looks (and neighbouring designs) report the same spot twice: keep the most confident within 60 px
         decorFindings.sort((a, b) => b.confidence - a.confidence)
-        for (let i = decorFindings.length - 1; i > 0; i--) if (decorFindings.some((o, j) => j < i && Math.hypot(o.x - decorFindings[i].x, o.y - decorFindings[i].y) < 60)) decorFindings.splice(i, 1)
+        for (let i = decorFindings.length - 1; i > 0; i--) if (decorFindings.some((o, j) => j < i && Math.hypot(o.x - decorFindings[i].x, o.y - decorFindings[i].y) < 80)) decorFindings.splice(i, 1)
       } catch (e) { warn('decor', e) }
       stageDone('decor', tD)
     }
@@ -490,7 +492,7 @@ export async function inspect(img, opts) {
             const crop = (b, mirror) => img.jpeg({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1), resize: fit(b, 1200), mirror, quality: JQ })
             const [a, m] = await Promise.all([crop(A, false), crop(B, true)])
             // مرتين، ولازم الاتنين يقولوا «مختلف» (الحكم الواحد بيتأثر بطريقة الفرد) — الثقة = الأصغر
-            const [r1, r2] = await Promise.all([spark(api, PROMPTS.mirror(g.part), [a, m], 'medium'), spark(api, PROMPTS.mirror(g.part), [a, m], 'medium')])
+            const [r1, r2] = await Promise.all([spark(api, PROMPTS.mirror(g.part) + WL, [a, m], 'medium'), spark(api, PROMPTS.mirror(g.part) + WL, [a, m], 'medium')])
             acct(r1.usage); acct(r2.usage)
             const j1 = r1.json || {}, j2 = r2.json || {}
             const both = !!j1.different && !!j2.different
@@ -520,7 +522,7 @@ export async function inspect(img, opts) {
           const rs = Math.min(1, gMax / Math.max(R.width, R.height))
           imgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) } }))
         }
-        const r = await spark(api, PROMPTS.global(!!opts.reference), imgs, 'low')
+        const r = await spark(api, PROMPTS.global(!!opts.reference) + WL, imgs, 'low')
         acct(r.usage)
         globalFindings = ((r.json && r.json.findings) || []).map(f => { const c = clamp(+f.confidence || 0, 0, 1); return { kind: 'global', source: 'global', type: String(f.type || 'other'), ...gridToPx(f.x, f.y, region), confidence: c, level: level(c), severity: 'major', why: f.why || '' } }).filter(f => f.confidence >= LEVELS.amber)
       } catch (e) { warn('global', e) }
