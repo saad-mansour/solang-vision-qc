@@ -257,7 +257,7 @@ export const EN = {
   'حطّ القطعة جوّا الإطار وشيل إيديك': 'Put the garment inside the frame and take your hands away',
   'تلقائي': 'Auto', 'المزيد': 'More', 'اقلب': 'Flip', 'افحص': 'Inspect', 'خيارات': 'Options', '📶 فحص الاتصال': '📶 Connection check',
   'ما معك قطعة ولا كاميرا؟ جرّب صورة من المصنع:': 'No garment or camera at hand? Try a factory photo:',
-  '🧪 سويت شيرت برتقالي (بقعة + خيوط)': '🧪 Orange sweatshirt (stain + threads)', '🧪 بنطلون زهري (خرم + بقعة)': '🧪 Pink pants (hole + stain)',
+  '🧪 سويت شيرت برتقالي (خيط طالع + خرم)': '🧪 Orange sweatshirt (loose thread + hole)', '🧪 بنطلون زهري (خرم + بقعة)': '🧪 Pink pants (hole + stain)',
   '🧪 جرّب صورة جاهزة: سويت شيرت': '🧪 Try a sample: sweatshirt', '🧪 جرّب صورة جاهزة: بنطلون': '🧪 Try a sample: pants',
   'عم حمّل الصورة الجاهزة…': 'Loading the sample photo…', 'عينة': 'sample', 'ما قدرت حمّل الصورة الجاهزة: ': 'Could not load the sample photo: ',
   '📶 عم قيس سرعة الرفع…': '📶 Measuring upload speed…', 'ضعيف': 'weak', 'متوسط': 'medium', 'منيح': 'good',
