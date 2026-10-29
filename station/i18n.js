@@ -253,7 +253,7 @@ export const EN = {
   'شغّل الكاميرا': 'Start the camera', 'المتصفح رح يسألك تسمح للكاميرا — اختار «السماح».': 'The browser will ask for the camera — choose «Allow».',
   'ثبّت الموبايل فوق نص الطاولة · الطاولة فاضية وسادة · الضو ثابت · بعدين من «⋯» صوّر الطاولة فاضية مرة وحدة': 'Fix the phone above the middle of the table · plain, empty table · steady light · then photograph the empty table once from «⋯»',
   'حطّ القطعة جوّا الإطار وشيل إيديك': 'Put the garment inside the frame and take your hands away',
-  'تلقائي': 'Auto', 'المزيد': 'More', '📶 فحص الاتصال': '📶 Connection check',
+  'تلقائي': 'Auto', 'المزيد': 'More', 'اقلب': 'Flip', 'افحص': 'Inspect', 'خيارات': 'Options', '📶 فحص الاتصال': '📶 Connection check',
   '📶 عم قيس سرعة الرفع…': '📶 Measuring upload speed…', 'ضعيف': 'weak', 'متوسط': 'medium', 'منيح': 'good',
   '📶 رفع {mbps} ميغابت/ث ({grade}) · ردّ {rtt} ms — الرفع لحالو حوالي {s} ث للقطعة': '📶 Upload {mbps} Mbit/s ({grade}) · round trip {rtt} ms — uploads alone take about {s} s per piece',
   '📶 ما قدرت قيس: ': '📶 Could not measure: ', '✓ انحفظ — عم رفع الصورة الكاملة…': '✓ Saved — uploading the full photo…',

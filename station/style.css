@@ -224,6 +224,8 @@ html[dir=ltr] .cost { text-align: left; }
 .camLast { position: absolute; bottom: 10px; inset-inline: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(22,163,74,.92); color: #fff; font-weight: 700; font-size: 14px; }
 .ctrl { display: flex; align-items: center; justify-content: space-around; gap: 10px; margin-top: 12px; }
 .rbtn { width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--line); background: #fff; font-size: 20px; cursor: pointer; }
+.rbtn.on { border-color: var(--blue); background: #dbeafe; }
+.ctrlItem { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
 .shutter { width: 76px; height: 76px; border-radius: 50%; border: 6px solid var(--blue); background: #fff; font-size: 28px; cursor: pointer; }
 .shutter:disabled, .rbtn:disabled { opacity: .5; cursor: default; }
 .switch { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; }

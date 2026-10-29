@@ -151,7 +151,10 @@ function wire() {
   $('btnRemote').addEventListener('click', requestRemoteCapture)
   $('btnLive').addEventListener('click', toggleLive)
   $('btnCamStart').addEventListener('click', () => startCamera())
-  $('btnMore').addEventListener('click', () => { $('moreRow').hidden = !$('moreRow').hidden })
+  $('btnMore').addEventListener('click', () => {                 // the options row sits below the controls: open it AND bring it on screen (on a phone it was off the bottom edge)
+    const r = $('moreRow'); r.hidden = !r.hidden; $('btnMore').classList.toggle('on', !r.hidden)
+    if (!r.hidden) setTimeout(() => { const b = r.getBoundingClientRect(); if (b.bottom > innerHeight) window.scrollBy({ top: b.bottom - innerHeight + 16, behavior: 'smooth' }) }, 120)
+  })
   $('btnNet').addEventListener('click', checkConnection)
   // overlay alignment needs no JS on resize: the svg is positioned on the same box as the <img> (see style.css .photoWrap)
 }
