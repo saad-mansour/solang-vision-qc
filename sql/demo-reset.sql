@@ -1,17 +1,15 @@
 -- SOLANG Vision QC — wipe the DEMO inspections to start clean (run in the Supabase SQL editor of the demo project only).
--- Removes every inspection, its findings, the learning examples (the inspector's verdict crops) and the photos in the
--- vision-photos bucket. Orders, workers and the schema stay. Ids restart at 1. There is no undo.
-begin;
+-- Removes every inspection, its findings and the learning examples (the inspector's verdict crops). Orders, workers and the
+-- schema stay. Ids restart at 1. There is no undo.
+--
+-- The photos in the vision-photos bucket are NOT deleted here: Supabase refuses direct deletes on storage.objects
+-- («Direct deletion from storage tables is not allowed. Use the Storage API instead», storage.protect_delete). Delete them
+-- from the dashboard instead: Storage → vision-photos → select the date folders (and references/) → Delete. Leaving them is
+-- harmless (orphaned files, some storage space).
 
 truncate table vision_findings, vision_examples, vision_inspections restart identity cascade;
-
--- the photos: storage rows go here; the files themselves are reaped by Supabase shortly after
-delete from storage.objects where bucket_id = 'vision-photos';
-
-commit;
 
 -- check: all three counts must be 0
 select (select count(*) from vision_inspections) as inspections,
        (select count(*) from vision_findings)    as findings,
-       (select count(*) from vision_examples)    as examples,
-       (select count(*) from storage.objects where bucket_id = 'vision-photos') as photos;
+       (select count(*) from vision_examples)    as examples;
