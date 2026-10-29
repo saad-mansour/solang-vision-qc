@@ -1262,7 +1262,7 @@ function renderStrip() {
     const p = h.annotated_path || (h.photo_path ? h.photo_path.replace(/photo\.jpg$/, 'preview.jpg') : null); if (p) im.src = S.db.publicUrl(p)   // preview.jpg is there from the release; annotated.jpg lands later
     b.appendChild(im)
     b.appendChild(el('span', 'hdec', uploading ? '⏫' : pending ? '⏳' : (DEC_EMOJI[h.decision] || '·')))
-    b.appendChild(el('span', 'hord', h.order_number || h.model_code || ''))
+    b.appendChild(el('span', 'hord', '#' + h.id + ' · ' + (h.order_number || h.model_code || '')))   // the piece's own number first: the order repeats, the piece does not
     b.appendChild(el('span', 'htime', uploading ? t('عم توصل من الكاميرا…') : pending ? t('بانتظار المراجعة') : `${hhmm(h.created_at)} · ${SIDE_AR[h.side] || ''}`))
     b.addEventListener('click', () => uploading ? toast(t('لسا عم توصل من الكاميرا — ثواني')) : (pending && MODE === 'review') ? switchReview(h) : openHistory(h))
     strip.appendChild(b)
