@@ -151,6 +151,7 @@ function wire() {
   $('btnRemote').addEventListener('click', requestRemoteCapture)
   $('btnLive').addEventListener('click', toggleLive)
   $('btnCamStart').addEventListener('click', () => startCamera())
+  document.querySelectorAll('.btn.sample').forEach((b) => b.addEventListener('click', () => runSample(b.dataset.sample, b.dataset.order)))
   $('btnMore').addEventListener('click', () => {                 // the options row sits below the controls: open it AND bring it on screen (on a phone it was off the bottom edge)
     const r = $('moreRow'); r.hidden = !r.hidden; $('btnMore').classList.toggle('on', !r.hidden)
     if (!r.hidden) setTimeout(() => { const b = r.getBoundingClientRect(); if (b.bottom > innerHeight) window.scrollBy({ top: b.bottom - innerHeight + 16, behavior: 'smooth' }) }, 120)
@@ -266,6 +267,20 @@ async function startCamera() {
   S.loop = setInterval(sampleTick, 125)        // ~8 fps is plenty for a hands-left-the-frame detector
 }
 
+// «🧪 جرّب صورة جاهزة»: a factory photo bundled with the page (station/samples/), for a judge with no garment and no camera —
+// the matching order is selected first so the pipeline knows the garment type, then it runs exactly like a shot
+async function runSample(file, orderNumber) {
+  if (S.running || S.capturing) { toast(t('في فحص شغّال — استنّي يخلص')); return }
+  const idx = S.orders.findIndex((o) => o.order_number === orderNumber)
+  if (idx >= 0) { $('orderSel').value = String(idx); S.order = S.orders[idx]; lsSet('vqc_order', orderNumber); renderRef() }
+  try {
+    toast(t('عم حمّل الصورة الجاهزة…'))
+    const r = await fetch('samples/' + file, { cache: 'force-cache' }); if (!r.ok) throw new Error('HTTP ' + r.status)
+    S.sampleRun = true                                           // a 24 MP sample with every tile asked twice took 60 s: one tile pass is enough at that resolution (~40 s)
+    await runInspection(await r.blob(), t('عينة'))
+  } catch (e) { toast(t('ما قدرت حمّل الصورة الجاهزة: ') + msg(e), 4000) } finally { S.sampleRun = false }
+}
+
 // the «شغّل الكاميرا» panel: first time on a device (the permission prompt follows a clear tap), or after a camera failure (with the reason)
 function showCamStart(text) { $('camStart').hidden = false; const m = $('camStartMsg'); m.textContent = text || ''; m.hidden = !text }
 
@@ -354,7 +369,7 @@ async function runInspection(blob, sourceLabel) {
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, reference, requireGarment: true, lang: LANG, tilePasses: 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, reference, requireGarment: true, lang: LANG, tilePasses: S.sampleRun ? 1 : 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress(t('انلغى الفحص')); return }

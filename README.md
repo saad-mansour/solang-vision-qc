@@ -233,7 +233,9 @@ redeploys. The station is at `https://<project>.<account>.workers.dev/station/` 
 `PROXY_URL: ''` (same origin), exactly as in local development. Live demo:
 <https://solang-vision-qc.saadmansour.workers.dev/station/> — Arabic by default (the factory's language); the first
 visit shows a card to pick English or Arabic and a 3-step how-to for trying it with one phone, and `?lang=en` opens it
-in English directly. Local check of the same setup: `npx wrangler dev` (or
+in English directly. **No garment or camera at hand?** The camera panel and «⋯» carry «🧪 Try a sample»: two factory
+photos with known defects (an orange sweatshirt with a stain and thread ends, pink pants with a hole and a stain) are
+bundled under `station/samples/` and run exactly like a shot. Local check of the same setup: `npx wrangler dev` (or
 `npx wrangler pages dev . --port 8788`) with the key in `.dev.vars`.
 
 **Separate worker (alternative):** [`worker/src/index.js`](worker/src/index.js) with
