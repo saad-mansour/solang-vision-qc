@@ -1,28 +1,13 @@
-MIT License
+Copyright (c) 2026 Saad Mansour / SOLANG. All rights reserved.
 
-Copyright (c) 2026 Saad Mansour / SOLANG
+This repository is published for review by the judges of the Meta Global AI Developer Hackathon
+(October 26 – November 4, 2026). You may read the code and run it locally to evaluate the submission.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+No other rights are granted: no copying, modification, redistribution, sublicensing, or commercial
+use without written permission from the copyright holder. The hackathon Official Rules grant the
+Organizers their own non-exclusive license to the submission; nothing here enlarges or limits that.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The vendored `@meta-sam/parser` (station/vendor/meta-sam-parser/) is Meta's and stays under the SAM
+License — see the NOTICE.md and LICENSE next to it.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
----
-
-Third-party code: station/vendor/meta-sam-parser/ contains @meta-sam/parser
-(Meta Platforms, Inc.), distributed under Meta's SAM License, NOT under this
-MIT license. See station/vendor/meta-sam-parser/NOTICE.md and the LICENSE file
-in that folder.
+Earlier commits carried an MIT license; that grant was withdrawn for all later versions on October 29, 2026.

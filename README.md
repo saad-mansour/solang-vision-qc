@@ -358,7 +358,8 @@ Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing th
 
 ## License
 
-Code in this repository: **MIT**, see [`LICENSE`](LICENSE) — Copyright (c) 2026 Saad Mansour / SOLANG.
+Code in this repository: **all rights reserved**, see [`LICENSE`](LICENSE) — Copyright (c) 2026 Saad Mansour / SOLANG. Published for
+hackathon judging: read it and run it locally to evaluate the submission; no other use without written permission.
 The vendored `@meta-sam/parser` in `station/vendor/meta-sam-parser/` is Meta's and is distributed under the
 **SAM License**; see [`station/vendor/meta-sam-parser/NOTICE.md`](station/vendor/meta-sam-parser/NOTICE.md) and the
 [`LICENSE`](station/vendor/meta-sam-parser/LICENSE) next to it.
