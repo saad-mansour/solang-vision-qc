@@ -384,6 +384,11 @@ async function runInspection(blob, sourceLabel) {
     sendState(); renderRef()
     // cards are refreshed here (after running=false) so a cancel / error / undecodable photo shows a way out instead of a stale «عم فحص…»
     if (S.view === 'inspect') { renderCards(); $('decisionBar').hidden = false; updateSaveEnabled(); $('tapHint').hidden = !S.img }
+    // camera device: no decision bar here, so a cancelled / failed run would leave the phone stuck on the photo — show «⬅ رجوع» and go back by itself
+    if (MODE === 'camera' && S.view === 'inspect' && !S.job) {
+      $('viewHead').hidden = false; $('btnBack').textContent = t('⬅ رجوع للكاميرا'); $('viewTitle').textContent = ''
+      const mine = S.img; setTimeout(() => { if (S.img === mine && !S.running && !S.job && S.view === 'inspect') newPiece() }, CAMERA_NEXT_MS)
+    }
   }
 }
 
@@ -1224,7 +1229,7 @@ function newPiece() {
     if (S.reviewId && !S.reviewLocked && S.findings.some((f) => f._dirty || !f.id) && !confirm(t('المراجعة ما انحفظت — تتركها؟'))) return
     resetInspection(); setView('inspect'); $('cameraPanel').hidden = true; renderCards(); $('progress').hidden = false; setProgress(t('بانتظار قطعة من الكاميرا…')); renderLive(); reviewTick(); return
   }
-  if (S.img && S.view === 'inspect' && !S.job && !S.noGarment && !confirm(t('هالفحص ما انحفظ — تتركو؟'))) return
+  if (MODE !== 'camera' && S.img && S.view === 'inspect' && !S.job && !S.noGarment && !confirm(t('هالفحص ما انحفظ — تتركو؟'))) return   // the camera device never saves by hand: nothing to lose, no question
   resetInspection(); setView('camera'); renderCards()
   // no detector reset here: it remembers the last captured scene, so the same garment is not re-shot and a swapped one
   // (even one already lying still) is seen as a motion burst when sampling resumes
