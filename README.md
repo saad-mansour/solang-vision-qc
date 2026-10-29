@@ -284,8 +284,8 @@ design close-ups: D» (`result.summary`), so the inspector sees the filter worki
   The proxy allow-lists models and paths, requires the page's own Origin, allows only `low`/`medium` reasoning effort,
   caps the body at 8 MB and applies a **per-IP daily limit** (well-formed requests only, past days evicted) so a public
   demo link cannot drain credits; a spend cap on the Meta account is the real backstop.
-- The publishable Supabase key can only insert into the demo bucket (no UPDATE, no DELETE policy): evidence photos
-  cannot be overwritten or erased from the page. The demo tables themselves have RLS off (fake data, throwaway project).
+- The publishable Supabase key can only insert into the demo bucket (no SELECT, UPDATE or DELETE policy): evidence
+  photos cannot be listed, overwritten or erased from the page; each one is reachable only by its own public URL. The demo tables themselves have RLS off (fake data, throwaway project).
 - The phone ⇄ tablet link is a **public Realtime channel** of the same throwaway project: anyone holding the demo key
   could ask the phone to shoot. The phone accepts at most one remote shot per 6 s, ignores replayed requests and, once a
   **pairing code** is typed on both devices (tap the status line), ignores every request that is not signed with it. A

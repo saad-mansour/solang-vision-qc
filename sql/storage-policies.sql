@@ -13,13 +13,11 @@ drop policy if exists "vision-photos read"   on storage.objects;
 drop policy if exists "vision-photos insert" on storage.objects;
 drop policy if exists "vision-photos update" on storage.objects;
 
-create policy "vision-photos read"   on storage.objects
-  for select to anon, authenticated
-  using (bucket_id = 'vision-photos');
-
 create policy "vision-photos insert" on storage.objects
   for insert to anon, authenticated
   with check (bucket_id = 'vision-photos');
 
--- No UPDATE and no DELETE policy on purpose: the public key can add evidence photos but never overwrite or erase them.
--- (An earlier version of this file created an "update" policy; the drop above removes it when you re-run the file.)
+-- No SELECT policy (since Oct 29): the bucket is public, so a photo is read by its direct URL without any policy, and a SELECT
+-- policy would let anyone with the publishable key LIST every file in the bucket (the dashboard flagged exactly that).
+-- No UPDATE and no DELETE policy on purpose: the public key can add evidence photos but never overwrite, list or erase them.
+-- (Earlier versions of this file created "read" and "update" policies; the drops above remove them when you re-run the file.)
