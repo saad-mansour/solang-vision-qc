@@ -101,7 +101,9 @@ dashed (blue in the harness's annotated JPEGs).
   runs on.
 - **Muse Spark 1.3** vision reasoning through the Responses API (`input_image` data URLs), with reasoning effort
   chosen per step: `low` for tiles, verify and global, `medium` for the mirror comparison. `minimal` on tiles was
-  faster but missed a known hole in one run out of three, so it is not used.
+  faster but missed a known hole in one run out of three, so it is not used; higher efforts were not worth their
+  seconds on a one-minute-per-piece budget — the effort sweep in the hackathon's Fireworks workshop (Oct 30) showed
+  the same thing on text benchmarks: more reasoning is not automatically more accuracy.
 - **Cloudflare Worker proxy** ([`worker/src/index.js`](worker/src/index.js)): the browser never sees the Meta key.
   The worker checks a station token, allow-lists paths and models, forces `stream:false`, caps the body size and
   applies a per-IP daily limit.
@@ -304,15 +306,17 @@ design close-ups: D» (`result.summary`), so the inspector sees the filter worki
 
 ## Roadmap
 
-- The learning loop is wired (confirmed / rejected crops per model ride along in the verify prompt); next: measure its
-  effect on repeated false alarms over a week of real inspections.
-- Known-good reference photo per order (the global pass already accepts one).
-- Recall on tiny holes and faint stains: smaller tiles or a second tile pass on dark/plain fabrics; the 3 misses above
-  are all of this kind.
+- The learning loop is wired (the inspector's confirmed / rejected crops per product ride along in the verify prompt and
+  the design close-ups); next: measure its effect on repeated false alarms over a week of real inspections. Once those
+  verdicts are in the hundreds, fine-tune **Muse Glimmer** on them (Fireworks offers free Glimmer training through
+  November) into a SOLANG-specific defect classifier that pre-screens the tiles before Spark looks.
+- Recall on tiny holes and faint stains: the high-recall tile prompt and the second pass are in; what is left is smaller
+  tiles on dark plain fabrics and a 24 MP input path (the Camera-app photo picked with 📁 already finds what 12 MP misses).
 - Fewer extra amber flags: use the inspector's rejections per fabric to raise the amber threshold where lint is common.
-- Speed: every stage that can overlap now does; what is left is the two mirror calls (~17 s at `medium` effort) — try
-  `low` effort with a third vote — and a lighter photo upload from the phone.
-- Integration with the factory's production system (order list, worker attribution to the real salary codes).
+- Speed: the design close-ups are now the long pole (about 40 s of a 60 s piece) — run their SAM call alongside the
+  tiles; the other half is the factory Wi-Fi (the same photo: 24 s on a home connection, 66 s on the inspection floor).
+- Integration with the factory's production system (order list, worker attribution to the real salary codes) — the
+  demo's order list and «➕ new product» stand in for it.
 
 ## Build log
 
