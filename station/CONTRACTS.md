@@ -243,6 +243,11 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   with the matching side only»; one side → «if the inspected garment shows the other side, do not compare prints»); the close-ups get them as the
   last reference images. `result.references` lists the sides used (`dev/tests/test_references.mjs`). Capture note: on iPhone every in-browser
   camera path (stream and `<input capture>`) yields 12 MP; a Camera-app photo picked with 📁 is 24 MP — the page says so under «⋯».
+- **Orders**: `#orderSel` ends with «➕ موديل جديد…» (`value 'new'`, only with a db) → `addOrderFlow()`: three `prompt()`s (name, type 1–4, colour),
+  the next `W26-<n>` after the highest in the list, `model_code` = type code (`HD/SW/PT/TS`) + `-26-<n>`, `db.insertOrder(row)` (`POST demo_orders`,
+  RLS is off on the demo tables), the list is re-read and the new order selected (`selectOrder(order_number)`, also used by the sample buttons).
+  Every tablet request to the phone carries the tablet's `order` and `side`; the phone's `followTablet(p)` switches to them before it acts (re-reading
+  the list when it does not know the order), so the piece is saved under the order chosen on the review screen.
 - **Station setup from the tablet** (Oct 29 — the phone hangs above the table, nobody reaches it): the review screen's link bar has `#btnRemoteBg`
   and `#btnRemoteRef` next to `#btnRemote`. They go through `requestRemote(kind, extra)` → link events `bg` / `ref` (same `req` + pairing `sig` as
   `capture`, one request at a time, `ack` within `ACK_WAIT_MS`); the phone's `remoteCommand(kind, p)` runs `captureBackground()` (the empty-table

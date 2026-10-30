@@ -122,6 +122,9 @@ export function makeDb(cfg) {
       catch (e) { if (e.status === 400 && /reference_back_url/.test(e.message)) return call('listOrders', 'GET', url(false)); throw e }
     },
 
+    // «➕ موديل جديد…» on the station: a demo order typed on the spot (the real list comes from the factory system)
+    insertOrder: (row) => call('insertOrder', 'POST', restUrl('demo_orders'), { body: row, prefer: 'return=minimal' }),
+
     listWorkers: () => call('listWorkers', 'GET', restUrl('demo_workers', { select: 'id,name,line,stage', order: 'line.asc,id.asc' })),
 
     // → the inserted row (with id)

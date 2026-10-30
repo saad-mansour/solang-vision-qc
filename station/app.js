@@ -125,7 +125,10 @@ async function init() {
 }
 
 function wire() {
-  $('orderSel').addEventListener('change', () => { S.order = S.orders[+$('orderSel').value] || null; if (S.order) lsSet('vqc_order', S.order.order_number); renderRef() })
+  $('orderSel').addEventListener('change', () => {
+    if ($('orderSel').value === 'new') { addOrderFlow(); return }
+    S.order = S.orders[+$('orderSel').value] || null; if (S.order) lsSet('vqc_order', S.order.order_number); renderRef()
+  })
   $('btnRef').addEventListener('click', setReferenceFromCurrent)
   $('btnRefFile').addEventListener('click', () => $('refInput').click())
   $('refInput').addEventListener('change', () => { const f = $('refInput').files && $('refInput').files[0]; $('refInput').value = ''; if (f) setReferenceFromFile(f) })
@@ -168,9 +171,33 @@ function renderOrders(list) {
   S.orders = list || []; const sel = $('orderSel'); clear(sel)
   if (!S.orders.length) { sel.appendChild(opt('', t('ما في طلبيات'))); return }
   S.orders.forEach((o, i) => sel.appendChild(opt(String(i), [o.order_number, o.product, o.color, o.line].filter(Boolean).join(' · '))))
+  if (S.db) sel.appendChild(opt('new', t('➕ موديل جديد…')))               // the demo list is hand-made (the factory system fills the real one by itself)
   const last = lsGet('vqc_order'); const idx = Math.max(0, S.orders.findIndex((o) => o.order_number === last))
   sel.value = String(idx); S.order = S.orders[idx]
   renderRef()
+}
+function selectOrder(orderNumber) {
+  const idx = S.orders.findIndex((o) => o.order_number === orderNumber)
+  if (idx >= 0) { $('orderSel').value = String(idx); S.order = S.orders[idx]; lsSet('vqc_order', orderNumber); renderRef() }
+  return idx >= 0
+}
+// «➕ موديل جديد…» (Saad, Oct 29: his pieces were not in the list, so every piece ran under one code): name, type and colour typed on the spot,
+// the next W26 number and a code from the type, inserted in demo_orders and selected. Three prompts, no new screen.
+const GARMENT_CHOICES = ['hoodie', 'sweatshirt', 'pants', 'tshirt'], GARMENT_CODE = { hoodie: 'HD', sweatshirt: 'SW', pants: 'PT', tshirt: 'TS' }
+async function addOrderFlow() {
+  const back = () => { if (S.order) $('orderSel').value = String(S.orders.indexOf(S.order)) }
+  if (!S.db) { back(); return }
+  const product = (prompt(t('اسم الموديل متل ما بدك يبيّن بالقائمة (مثلاً: هودي أطفال ولادي):')) || '').trim(); if (!product) { back(); return }
+  const g = (prompt(t('نوع القطعة؟ 1 هودي · 2 سويت شيرت · 3 بنطلون · 4 تيشيرت'), '1') || '').trim()
+  const garment = GARMENT_CHOICES[(+g || 1) - 1] || 'hoodie'
+  const color = (prompt(t('اللون (اختياري):')) || '').trim()
+  const n = Math.max(100, ...S.orders.map((o) => +((String(o.order_number).match(/^W26-(\d+)$/) || [])[1] || 0))) + 1
+  const order_number = 'W26-' + n, model_code = GARMENT_CODE[garment] + '-26-' + n
+  try {
+    await S.db.insertOrder({ order_number, model_code, product, garment, color: color || null, line: null })
+    renderOrders(await S.db.listOrders()); selectOrder(order_number)
+    toast(t('✓ انضاف {o} · {p}', { o: order_number, p: product }), 4000)
+  } catch (e) { toast(t('ما قدرت ضيف الموديل: ') + msg(e), 4000); back() }
 }
 
 // ── the product's reference photo: a correct piece, flat, from above (demo_orders.reference_url, one per model_code) ────────────
@@ -287,8 +314,7 @@ async function startCamera() {
 // the matching order is selected first so the pipeline knows the garment type, then it runs exactly like a shot
 async function runSample(file, orderNumber) {
   if (S.running || S.capturing) { toast(t('في فحص شغّال — استنّي يخلص')); return }
-  const idx = S.orders.findIndex((o) => o.order_number === orderNumber)
-  if (idx >= 0) { $('orderSel').value = String(idx); S.order = S.orders[idx]; lsSet('vqc_order', orderNumber); renderRef() }
+  selectOrder(orderNumber)
   try {
     toast(t('عم حمّل الصورة الجاهزة…'))
     const r = await fetch('samples/' + file, { cache: 'force-cache' }); if (!r.ok) throw new Error('HTTP ' + r.status)
@@ -1064,10 +1090,18 @@ async function remoteCommand(kind, p) {
   for (let i = 0; i < 25 && S.camStarting; i++) await new Promise((r) => setTimeout(r, 200))   // a camera that is just (re)starting gets up to 5 s
   if (!S.cam) { reply(false, t('الكاميرا مش شغّالة عالموبايل')); return }
   if (S.view !== 'camera') { resetInspection(); setView('camera'); renderCards() }
+  await followTablet(p)
   if (kind === 'bg') { await new Promise((r) => setTimeout(r, 350)); const err = await captureBackground(); reply(!err, err); return }   // stored on THIS device: the phone is the one that compares
   if (kind === 'ref') { reply(true, null, { pending: true }); setTimeout(() => remoteReference(p, reply), 350); return }
   reply(true); sendState(); S.lastRemoteShot = Date.now()
   setTimeout(() => captureFromCamera(t('من شاشة المراجعة')), 350)      // let the live view paint a frame after the panel switch
+}
+// the tablet's order and side ride on the request: the phone switches before it shoots (an order added on the tablet → the list is re-read first)
+async function followTablet(p) {
+  if (p.side === 'front' || p.side === 'back') setSide(p.side)
+  if (!p.order || (S.order && S.order.order_number === p.order)) return
+  if (!S.orders.some((o) => o.order_number === p.order) && S.db) { try { renderOrders(await S.db.listOrders()) } catch (e) { /* keep the list we have */ } }
+  selectOrder(String(p.order))
 }
 // «📌 صوّر مرجع … من الموبايل»: shoot, upload a 1600 px copy under references/<model>/, store it for that side — the tablet gets the URL in the final ack
 async function remoteReference(p, reply) {
@@ -1093,13 +1127,13 @@ async function requestRemote(kind, extra) {
   S.capReq = { req, kind, timer: remoteTimeout(req) }
   renderLink()
 }
-function requestRemoteCapture() { return requestRemote('capture') }
+function requestRemoteCapture() { return requestRemote('capture', { order: S.order && S.order.order_number, side: S.side }) }   // the phone saves the piece under the tablet's order and side
 // the tablet drives the station setup too (Saad, Oct 29: the phone hangs above the table, the tablet is below — nobody reaches the phone)
 function requestRemoteBg() { if (confirm(t('الطاولة فاضية هلق تحت الموبايل؟ بيصوّرها وبيحفظها عالموبايل'))) requestRemote('bg') }
 function requestRemoteRef() {
   const o = S.order; if (!o || !o.model_code) { toast(t('ما في طلبية مختارة')); return }
   if (!confirm(t('القطعة الصح للموديل {m} ({side}) تحت الموبايل هلق؟ بيصوّرها وبيعتمدها مرجع (بتنبدّل القديمة إذا في)', { m: o.model_code, side: SIDE_AR[S.side] }))) return
-  requestRemote('ref', { model: o.model_code, side: S.side })
+  requestRemote('ref', { model: o.model_code, side: S.side, order: o.order_number })
 }
 // WebRTC signaling rides on the link (live.js): the tablet asks, the phone offers, the tablet answers
 function onRtc(event, p) {
