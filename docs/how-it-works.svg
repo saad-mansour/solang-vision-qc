@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="#5b6b7a"/></marker>
+    <style>
+      .box{fill:#fff;stroke:#c9d2db;stroke-width:2;rx:14}
+      .meta{fill:#eef4ff;stroke:#7aa2ff}
+      .dev{fill:#f6f7f9;stroke:#9aa7b4}
+      .human{fill:#fff4e5;stroke:#f0a94b}
+      .t{font-size:22px;fill:#1f2a37;font-weight:600}
+      .s{font-size:17px;fill:#46525f}
+      .tag{font-size:15px;fill:#2f54eb;font-weight:700;letter-spacing:.5px}
+      .arrow{stroke:#5b6b7a;stroke-width:2.5;fill:none;marker-end:url(#a)}
+      .lbl{font-size:15px;fill:#5b6b7a}
+    </style>
+  </defs>
+  <rect width="1600" height="900" fill="#fbfcfd"/>
+  <text x="60" y="64" font-size="34" font-weight="700" fill="#1f2a37">SOLANG Vision QC — how one piece is inspected</text>
+  <text x="60" y="96" class="s">Phone above the final-inspection table · iPad in front of the inspector · SAM 3.1 + Muse Spark through a small proxy · the inspector decides</text>
+
+  <!-- devices column -->
+  <rect x="60" y="150" width="300" height="130" class="box dev"/>
+  <text x="80" y="185" class="t">📱 Phone on a stand</text>
+  <text x="80" y="215" class="s">shoots when the piece lies still</text>
+  <text x="80" y="240" class="s">(or on the tablet's command)</text>
+  <text x="80" y="265" class="s">12 MP photo, trimmed uploads</text>
+
+  <rect x="60" y="330" width="300" height="150" class="box dev"/>
+  <text x="80" y="365" class="t">🧐 iPad — review screen</text>
+  <text x="80" y="395" class="s">live view on demand, 📸 shutter,</text>
+  <text x="80" y="420" class="s">🧹 empty table, 📌 reference</text>
+  <text x="80" y="445" class="s">front / back — all driven from here</text>
+
+  <rect x="60" y="540" width="300" height="190" class="box human"/>
+  <text x="80" y="575" class="t">👩 Inspector decides</text>
+  <text x="80" y="605" class="s">circles on the photo, a reason</text>
+  <text x="80" y="630" class="s">in her language; ✓ defect / ✗ not</text>
+  <text x="80" y="655" class="s">per spot, then pass · repair · reject</text>
+  <text x="80" y="690" class="s" font-style="italic">Her verdicts become labelled</text>
+  <text x="80" y="712" class="s" font-style="italic">examples for the next piece →</text>
+
+  <!-- pipeline -->
+  <rect x="440" y="150" width="340" height="110" class="box meta"/>
+  <text x="460" y="178" class="tag">SAM 3.1</text>
+  <text x="460" y="208" class="t">1 · Find the garment</text>
+  <text x="460" y="238" class="s">box + mask → the table is never inspected</text>
+
+  <rect x="440" y="300" width="340" height="130" class="box meta"/>
+  <text x="460" y="328" class="tag">MUSE SPARK ×2</text>
+  <text x="460" y="358" class="t">2 · Tiles at full resolution</text>
+  <text x="460" y="388" class="s">1200 px tiles over the mask, high-recall</text>
+  <text x="460" y="412" class="s">prompt, every tile asked twice</text>
+
+  <rect x="440" y="470" width="340" height="150" class="box meta"/>
+  <text x="460" y="498" class="tag">MUSE SPARK · 2× / 3× CROP</text>
+  <text x="460" y="528" class="t">3 · Verify each candidate</text>
+  <text x="460" y="558" class="s">magnified crop + the inspector's past</text>
+  <text x="460" y="582" class="s">✓/✗ crops of this product as references</text>
+  <text x="460" y="606" class="s">lint / texture / print → dropped</text>
+
+  <rect x="860" y="150" width="340" height="130" class="box meta"/>
+  <text x="880" y="178" class="tag">SAM 3.1 + MUSE SPARK</text>
+  <text x="880" y="208" class="t">4 · Parts &amp; silhouette</text>
+  <text x="880" y="238" class="s">sleeve vs mirrored sleeve, leg lengths</text>
+  <text x="880" y="262" class="s">from the mask — construction asymmetry</text>
+
+  <rect x="860" y="320" width="340" height="140" class="box meta"/>
+  <text x="880" y="348" class="tag">SAM 3.1 + MUSE SPARK ×2</text>
+  <text x="880" y="378" class="t">5 · Embroidery &amp; print close-ups</text>
+  <text x="880" y="408" class="s">each design cut from the photo, magnified</text>
+  <text x="880" y="432" class="s">≤3×, judged against the approved piece</text>
+
+  <rect x="860" y="500" width="340" height="120" class="box meta"/>
+  <text x="880" y="528" class="tag">MUSE SPARK · WHOLE GARMENT</text>
+  <text x="880" y="558" class="t">6 · Global compare</text>
+  <text x="880" y="588" class="s">front / back reference of the product:</text>
+  <text x="880" y="612" class="s">misplaced print, missing part, twisted seam</text>
+
+  <rect x="1280" y="300" width="260" height="190" class="box"/>
+  <text x="1300" y="335" class="t">Result card</text>
+  <text x="1300" y="365" class="s">findings merged, each with</text>
+  <text x="1300" y="389" class="s">place · type · confidence · why</text>
+  <text x="1300" y="413" class="s">+ what the layers did:</text>
+  <text x="1300" y="437" class="s">N candidates → K confirmed,</text>
+  <text x="1300" y="461" class="s">M dropped, close-ups, global</text>
+
+  <!-- arrows -->
+  <path class="arrow" d="M360 215 H440"/>
+  <path class="arrow" d="M610 260 V300"/>
+  <path class="arrow" d="M610 430 V470"/>
+  <path class="arrow" d="M780 205 H860"/>
+  <path class="arrow" d="M780 380 H860"/>
+  <path class="arrow" d="M780 560 H860"/>
+  <path class="arrow" d="M700 620 V 665 H 1235 C 1262 665, 1262 500, 1292 490"/>
+  <path class="arrow" d="M1200 215 C 1240 215, 1250 330, 1280 330"/>
+  <path class="arrow" d="M1200 390 H1280"/>
+  <path class="arrow" d="M1200 560 C 1240 560, 1250 470, 1280 470"/>
+  <path class="arrow" d="M1410 490 C 1410 730, 400 730, 360 640"/>
+  <text x="880" y="748" class="lbl">result → review screen (early release: the card first, the photos follow)</text>
+  <path class="arrow" d="M210 730 C 210 840, 640 840, 640 640" stroke-dasharray="7 6"/>
+  <text x="300" y="838" class="lbl">learning loop: her ✓/✗ crops ride along in step 3 and step 5 for the same product</text>
+  <path class="arrow" d="M360 400 C 400 400, 400 215, 440 215" stroke-dasharray="7 6"/>
+  <text x="372" y="292" class="lbl" transform="rotate(-90 372 292)">commands</text>
+
+  <text x="60" y="884" class="s" font-size="15">Every call goes through a same-origin Cloudflare Worker with a daily cap. Rows: inspection · findings (append-only verdicts) · examples · references. Demo data only; the factory database is never touched.</text>
+</svg>

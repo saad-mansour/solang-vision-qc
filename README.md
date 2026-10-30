@@ -16,6 +16,8 @@ the system can learn from the people who actually know the garments.
 
 ## How it works
 
+![How one piece is inspected](docs/how-it-works.png)
+
 One photo (typically 3024×4032 from the phone's browser camera, 4284×5712 from its camera app) goes through eight steps. Everything runs in the browser; the
 only server is a thin proxy that holds the API key. The method is documented in [`shared/pipeline.js`](shared/pipeline.js).
 
