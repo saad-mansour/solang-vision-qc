@@ -205,6 +205,7 @@ export const EN = {
   '🧹 الموبايل عم يصوّر الطاولة…': '🧹 The phone is photographing the table…', '📷 الموبايل عم يجهّز الكاميرا ويصوّر…': '📷 The phone is starting its camera and shooting…',
   'الموبايل ما لقى الطلبية {o} — جرّبي مرة تانية': 'The phone could not find order {o} — try again', 'نوع القطعة لازم يكون رقم من 1 لـ4 — ما انضاف شي': 'The garment type must be a number from 1 to 4 — nothing was added',
   '📌 شيل مرجع': '📌 Remove reference',
+  'القطعة مايلة بالكادر (الرقبة مش لفوق) — ما قارنت الكمين وما قست الطول': 'The garment lies sideways (neck not at the top) — sleeves not compared, length not measured',
   'ما في طلبية مختارة': 'No order selected', 'عم أحفظ المرجع…': 'Saving the reference…', 'ما في صورة لاعتمادها': 'No photo to use', 'ما قدرت أحفظ المرجع: ': 'Could not save the reference: ',
   'تعتمد هالقطعة مرجع {side} صح للموديل {m}؟ (بتنبدّل القديمة إذا في)': 'Use this piece as the correct {side} reference for product {m}? (replaces the old one, if any)',
   'تعتمد هالصورة مرجع {side} صح للموديل {m}؟ (بتنبدّل القديمة إذا في)': 'Use this photo as the correct {side} reference for product {m}? (replaces the old one, if any)',

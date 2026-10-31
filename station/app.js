@@ -410,12 +410,15 @@ async function runInspection(blob, sourceLabel) {
     if (!S.api) throw new Error(t('ما في إعدادات (config.js) — ما فيني كلّم الموديل'))
     // references for the verifier (fetched while SAM runs) and the empty-table comparison (local, no model call)
     const examples = (S.db && order && order.model_code) ? loadExamples(order.model_code) : []
+    // the mirror comparison is skipped for a product whose «asymmetry» the inspector rejected twice and never confirmed (≤ 2 s, anything wrong → on)
+    const mv = (S.db && order && order.model_code) ? await Promise.race([S.db.mirrorVerdicts(order.model_code).catch(() => null), new Promise((r) => setTimeout(() => r(null), 2000))]) : null
+    const mirror = mv && mv.rejected >= 2 && !mv.confirmed ? 'off' : 'on'
     const foreground = await foregroundFor(img)
     refs = await loadReferences(order)   // the product's correct piece (front / back), for the global pass and the design close-ups
     // the pipeline passes request bodies through untouched, so the AbortSignal rides along in each body (api.js strips it)
     const wrappedApi = { responses: (b) => S.api.responses({ ...b, signal: controller.signal }) }
     // signal goes to the pipeline too: it stops starting new tiles/stages and rejects with AbortError right away
-    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, references: refs, requireGarment: true, lang: LANG, tilePasses: S.sampleRun ? 1 : 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
+    const res = await inspect(img, { api: wrappedApi, samParser, garment: (order && order.garment) || 'garment', onProgress, concurrency: 10, signal: controller.signal, examples, foreground, references: refs, mirror, requireGarment: true, lang: LANG, tilePasses: S.sampleRun ? 1 : 2, decorPasses: 2 })   // every tile and every design asked twice (Saad, Oct 28: «it found something I had not seen» — worth the seconds)
     if (S.img !== img) return                   // the inspector moved on while we were running
     // the pipeline turns aborted calls into stage warnings and resolves with an empty result — report the cancel, not «no defects»
     if (controller.signal.aborted) { setProgress(t('انلغى الفحص')); return }
@@ -525,6 +528,7 @@ function framingText(f) {
   const parts = []
   if (f.cut && f.cut.length) parts.push(t('القطعة طالعة برّا الكادر من {sides}', { sides: f.cut.map((s) => SIDE_WORD[s] || s).join(t(' و')) }))
   if (f.small) parts.push(t('القطعة صغيرة بالصورة ({p}٪) — قرّب الكاميرا', { p: f.areaPct }))
+  if (f.sideways) parts.push(t('القطعة مايلة بالكادر (الرقبة مش لفوق) — ما قارنت الكمين وما قست الطول'))
   if (f.clutter >= 25) parts.push(t('صورة الطاولة الفاضية ما بتطابق الكادر ({p}٪ مختلف — الكاميرا تحركت؟) — عيد 🧹 أو شيلها', { p: Math.round(f.clutter) }))   // Oct 29: 40–53 % on every hand-held piece — that is the camera, not an object
   else if (f.clutter) parts.push(t('في شي غير القطعة عالطاولة (إيد / عصاية / غرض) — شيلو'))
   return parts.length ? '⚠ ' + parts.join(' · ') : ''

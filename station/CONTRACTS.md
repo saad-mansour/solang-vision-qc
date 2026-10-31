@@ -261,6 +261,11 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   the close-up override clears `unsure`; «seen in two tiles» only with `hits ≥ 2`; a reference that fails to encode drops out of the global pass
   (`global-ref` warn); a cancel during the close-ups propagates; mirror `differences` normalised. Worker: `DAILY_LIMIT` default 4000 (≈100
   pieces per address per day — 400 was ≈10), the 5000-key eviction refuses new addresses only, an upstream fetch failure is a JSON 502.
+- **Lay and mirror (Oct 31 afternoon)**: the parts boxes are parsed once before step 4; two boxes stacked vertically = `parts.sideways` →
+  `framing.sideways` (re-emitted as a `framing` event; the station says «lay it neck-up»), the silhouette measure and the mirror comparison are
+  skipped. `opts.mirror === 'off'` (station: `db.mirrorVerdicts(model_code)` — embedded filter on `vision_inspections!inner` — gave ≥ 2 rejected
+  and 0 confirmed) skips the mirror too (`parts.mirror.skipped`). A mirror finding is amber at most (`confidence ≤ 0.79`, `severity minor`).
+  `framingCheck` `smallPct` is 55 (was 6): under 55 % of the frame the station asks to bring the camera closer.
 - **Station setup from the tablet** (Oct 29 — the phone hangs above the table, nobody reaches it): the review screen's link bar has `#btnRemoteBg`
   and `#btnRemoteRef` next to `#btnRemote`. They go through `requestRemote(kind, extra)` → link events `bg` / `ref` (same `req` + pairing `sig` as
   `capture`, one request at a time, `ack` within `ACK_WAIT_MS`); the phone's `remoteCommand(kind, p)` runs `captureBackground()` (the empty-table

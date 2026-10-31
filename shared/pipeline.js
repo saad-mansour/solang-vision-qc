@@ -91,7 +91,7 @@ export const PROMPTS = {
   verifyRefs: (k) => `The first ${k} image${k > 1 ? 's are' : ' is'} REFERENCE crop${k > 1 ? 's' : ''} from earlier pieces of this SAME product, each already judged by the human inspector as listed. ` +
     'Use them to tell this product\'s normal prints, seams, labels and texture apart from real defects. The LAST image is the spot to judge now. ',
   mirror: (part) => `Image 1 is the LEFT ${part} of a children's garment lying flat (top-down). Image 2 is the RIGHT ${part}, flipped horizontally so it should look like a mirror image of the left one. ` +
-    'Compare the construction: seam lines and their positions along the body, panel shapes, pocket or decoration position, stitching lines. Ignore wrinkles, lighting, shadows, how the fabric is laid, the angle of the hem/cuff edge (it depends on the lay), and differences in where the crop was cut. ' +
+    'Compare the construction: seam lines and their positions along the body, panel shapes, pocket or decoration position, stitching lines. Ignore wrinkles, lighting, shadows, how the fabric is laid, the angle of the hem/cuff edge (it depends on the lay), and differences in where the crop was cut. A cuff or hem turned up, folded under or twisted, a hood or the body lying over one part, and a rib cuff that is hidden by a fold are all how the piece lies, not construction differences. ' +
     'Are there real construction differences a quality inspector would reject (seams in different positions or angles, missing or extra seam, different panel shape, decoration in a different place)? ' +
     'Answer ONLY JSON: {"different":true|false,"confidence":0-1,"differences":["short description with location"],"why":"one sentence"}',
   global: (sides) => 'You are a senior garment quality inspector. The garment may lie in any orientation on the table (sideways, upside down): judge the print placement and the parts relative to the garment itself (neck to hem), never relative to the photo frame — a print that reads sideways only because the garment lies sideways is correct. ' + refIntro(sides) +
@@ -471,10 +471,27 @@ export async function inspect(img, opts) {
       stageDone('decor', tD)
     }
 
+    // the two part boxes (sleeves / legs), from the SAM call sent in step 1 — used by the silhouette AND the mirror below.
+    // Stacked vertically (centres further apart in y than in x) = the garment lies sideways (neck left or right): both measures assume
+    // neck-up, so they are skipped and the station asks to lay the piece straight (Oct 31: «sleeve 25 % shorter» and three «different
+    // cuff» alarms on a hoodie lying with the hood to the left; 1.5 % on the next, upright, photo)
+    let pboxes = []
+    if (g.part && partsSam) {
+      try {
+        const text = await partsSam
+        pboxes = boxesToFull(parseSamBoxes(text).filter(b => b.c == null || b.c >= 0.4), scale, region, 0.04)
+        pboxes = pboxes.sort((p, q) => (q.x2 - q.x1) * (q.y2 - q.y1) - (p.x2 - p.x1) * (p.y2 - p.y1)).slice(0, 2).sort((p, q) => p.x1 - q.x1)
+      } catch (e) { warn('parts', e); pboxes = [] }
+    }
+    if (pboxes.length === 2) {
+      const cx = b => (b.x1 + b.x2) / 2, cy = b => (b.y1 + b.y2) / 2
+      parts.sideways = Math.abs(cy(pboxes[0]) - cy(pboxes[1])) > Math.abs(cx(pboxes[0]) - cx(pboxes[1]))
+      if (parts.sideways) { framing.sideways = true; progress('framing', framing) }
+    }
     // ── 4) silhouette measurement from the SAM mask
     checkAbort()
     let t = Date.now()
-    if (mask && g.measure) {
+    if (mask && g.measure && !parts.sideways) {
       try {
         const s = silhouette(mask.raster, mask.w, mask.h)
         parts.silhouette = { lenDiffPct: s.lenDiffPct, reachDiffPct: s.reachDiffPct, cx: s.cx }
@@ -500,11 +517,13 @@ export async function inspect(img, opts) {
       if (g.part) {
         progress('parts', { part: g.part })
         try {
-          const text = await partsSam   // sent during step 1
-          let boxes = boxesToFull(parseSamBoxes(text).filter(b => b.c == null || b.c >= 0.4), scale, region, 0.04)
-          boxes = boxes.sort((p, q) => (q.x2 - q.x1) * (q.y2 - q.y1) - (p.x2 - p.x1) * (p.y2 - p.y1)).slice(0, 2).sort((p, q) => p.x1 - q.x1)
+          const boxes = pboxes   // from the SAM call sent during step 1, parsed above
           parts.boxes = boxes
-          if (boxes.length === 2) {
+          // opts.mirror === 'off': the inspector rejected the mirror's «asymmetry» on this product twice already and never confirmed one —
+          // the comparison is skipped for this product (two Spark calls fewer; the station decides from vision_findings)
+          if (opts.mirror === 'off') parts.mirror = { skipped: 'rejected before on this product' }
+          else if (parts.sideways) parts.mirror = { skipped: 'garment lies sideways' }
+          else if (boxes.length === 2) {
             // equalize: same height span for legs (top of both → bottom of the longer), same width span for sleeves
             let A = { ...boxes[0] }, B = { ...boxes[1] }
             if (g.measure === 'leg') { const yTop = Math.min(A.y1, B.y1), yBot = Math.max(A.y2, B.y2); A.y1 = B.y1 = yTop; A.y2 = B.y2 = yBot }
@@ -521,7 +540,7 @@ export async function inspect(img, opts) {
             const j = both ? (clamp(+j1.confidence || 0, 0, 1) <= clamp(+j2.confidence || 0, 0, 1) ? j1 : j2) : (!j1.different ? j1 : j2)
             parts.mirror = { different: both, confidence: clamp(+j.confidence || 0, 0, 1), differences: Array.isArray(j.differences) ? j.differences.map(String) : (j.differences ? [String(j.differences)] : []), why: j.why || '', votes: [!!j1.different, !!j2.different] }
             if (both && parts.mirror.confidence >= LEVELS.amber) {
-              mirrorFindings.push({ kind: 'global', source: 'mirror', type: 'asymmetry', x: Math.round((B.x1 + B.x2) / 2), y: Math.round((B.y1 + B.y2) / 2), confidence: parts.mirror.confidence, level: level(parts.mirror.confidence), severity: 'major', why: (parts.mirror.differences[0] || parts.mirror.why) })
+              mirrorFindings.push({ kind: 'global', source: 'mirror', type: 'asymmetry', x: Math.round((B.x1 + B.x2) / 2), y: Math.round((B.y1 + B.y2) / 2), confidence: Math.min(0.79, parts.mirror.confidence), level: 'amber', severity: 'minor', why: (parts.mirror.differences[0] || parts.mirror.why) })   // amber at most: an inference from two crops, for the inspector's eye (3 of 3 were the lay on Oct 31)
             }
           }
         } catch (e) { warn('parts', e) }

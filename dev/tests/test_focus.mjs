@@ -22,7 +22,9 @@ const half = f.coverage({ x: 300, y: 400, w: 200, h: 400 })
 check(half > 0.3 && half < 0.9, `a tile straddling the edge has partial coverage (${half.toFixed(2)})`)
 
 const fr = framingCheck({ focus: f, box: { x: 400, y: 200, w: 1000, h: 1000 }, W, H })
-check(fr.cut.length === 0 && fr.small === false && fr.areaPct === 31.3, `well-framed garment: no cut, not small, ${fr.areaPct} % of the frame`)
+check(fr.cut.length === 0 && fr.small === true && fr.areaPct === 31.3, `garment at ${fr.areaPct} % of the frame: no cut, but small (under 55 % the station asks to come closer)`)
+const frOk = framingCheck({ focus: f, box: { x: 100, y: 100, w: 1700, h: 1300 }, W, H })
+check(frOk.small === false && frOk.areaPct > 55, `a garment filling ${frOk.areaPct} % of the frame is not small`)
 const edgeMask = { w: 300, h: 400, left: 0, top: 50, raster: new Uint8Array(300 * 400).fill(1) }   // touches the left edge
 const fe = garmentGrid(edgeMask, scale, W, H)
 const fre = framingCheck({ focus: fe, box: { x: 0, y: 100, w: 600, h: 800 }, W, H })

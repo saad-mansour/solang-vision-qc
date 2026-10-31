@@ -69,7 +69,7 @@ export function garmentGrid(mask, scale, W, H, { cell = 32, marginFrac = 0.02 } 
   }
 }
 
-export function framingCheck({ focus, box, rawBox, W, H, smallPct = 6, edgeCells = 1, edgeFrac = 0.01 } = {}) {
+export function framingCheck({ focus, box, rawBox, W, H, smallPct = 55, edgeCells = 1, edgeFrac = 0.01 } = {}) {   // Oct 31: at 41 % of the frame a red pen mark on a pink piece was missed — the garment should fill the frame
   const cut = []
   const eb = rawBox || box                       // the edge test wants the UNpadded box (the padded one is clamped to the frame and always «touches»)
   if (focus) {

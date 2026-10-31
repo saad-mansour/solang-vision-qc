@@ -173,6 +173,13 @@ export function makeDb(cfg) {
       return call('findingsFor', 'GET', restUrl('vision_findings', { select: '*', inspection_id: 'eq.' + inspectionId, order: 'id.asc' }))
     },
 
+    // the inspector's verdicts on the mirror's «asymmetry» for a product → { rejected, confirmed } (the mirror step is skipped after two rejections and no confirmation)
+    mirrorVerdicts: async (modelCode) => {
+      if (!modelCode) return { rejected: 0, confirmed: 0 }
+      const rows = (await call('mirrorVerdicts', 'GET', restUrl('vision_findings', { select: 'verdict,inspection:vision_inspections!inner(model_code)', source: 'eq.mirror', 'inspection.model_code': 'eq.' + modelCode, verdict: 'not.is.null' }))) || []
+      return { rejected: rows.filter((r) => r.verdict === 'rejected').length, confirmed: rows.filter((r) => r.verdict === 'confirmed').length }
+    },
+
     examplesFor: (modelCode, limit = 12) => call('examplesFor', 'GET', restUrl('vision_examples', {
       select: '*', model_code: 'eq.' + modelCode, order: 'created_at.desc', limit: String(limit),
     })),
