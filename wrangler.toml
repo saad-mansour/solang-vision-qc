@@ -13,7 +13,7 @@ binding = "ASSETS"
 not_found_handling = "none"
 
 [vars]
-DAILY_LIMIT = "400"
+DAILY_LIMIT = "4000"
 MAX_BODY_MB = "8"
 
 [observability]

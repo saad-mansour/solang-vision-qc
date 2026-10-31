@@ -343,7 +343,10 @@ export async function inspect(img, opts) {
         // duplicates merge below (mergeCandidates), a spot seen twice counts as two hits
         const passes = Math.max(1, Math.min(3, opts.tilePasses || 1))
         const rs = await Promise.all(Array.from({ length: passes }, () => spark(api, (opts.tilePrompt === 'strict' ? PROMPTS.tile : PROMPTS.tileRecall) + WL, [b64], opts.tileEffort || 'low')))   // minimal was faster but missed a known hole 1 run in 3
-        const r = { usage: rs.reduce((a, x) => ({ input_tokens: (a.input_tokens || 0) + ((x.usage || {}).input_tokens || 0), output_tokens: (a.output_tokens || 0) + ((x.usage || {}).output_tokens || 0) }), {}), json: { defects: rs.flatMap((x) => ((x.json && x.json.defects) || [])) }, calls: passes }
+        const lists = rs.map((x) => x.json && Array.isArray(x.json.defects) ? x.json.defects : null)   // no parseable defects array = a failed look, never «a clean tile»
+        if (!lists.some(Boolean)) warn('tile', new Error('no JSON defects array in the reply'), { i, passes, raw: String((rs[0] && rs[0].raw) || '').slice(0, 120) })
+        else if (lists.some((l) => !l)) warn('tile-pass', new Error('one pass returned no JSON defects array'), { i })   // degraded recall only (not in the station's failed-stage list)
+        const r = { usage: rs.reduce((a, x) => ({ input_tokens: (a.input_tokens || 0) + ((x.usage || {}).input_tokens || 0), output_tokens: (a.output_tokens || 0) + ((x.usage || {}).output_tokens || 0) }), {}), json: { defects: lists.flatMap((l) => l || []) }, calls: passes }
         acct(r.usage); usage.calls += passes - 1
         const defects = ((r.json && r.json.defects) || []).map(d => ({ ...gridToPx(d.x, d.y, abs), type: String(d.type || 'other'), confidence: clamp(+d.confidence || 0, 0, 1), why: d.why || '' }))
         progress('tile', { i, n: tiles.length, defects: defects.length })
@@ -396,7 +399,7 @@ export async function inspect(img, opts) {
       else if (v.verdict === 'unsure' || v.verdict === 'error') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: Math.min(0.79, v.confidence * 0.8), level: 'amber', severity: 'minor', why: WT.unsure + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
       // thread vs lint is the inspector's call: a thread end in the fabric's own colour reads as «lint» at 2× (Saad's pulled thread, Oct 28) — amber, not dropped
       else if ((v.type === 'loose_thread' || v.vtype === 'loose_thread') && (v.verdict === 'lint' || (v.second && v.second.verdict === 'lint')) && v.vconfidence < 0.8 && v.confidence >= 0.55) findings.push({ kind: 'local', source: 'tiles', type: 'loose_thread', x: v.x, y: v.y, confidence: 0.5, level: 'amber', severity: 'minor', why: WT.threadOrLint + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
-      else if ((v.hits >= 2 && v.confidence >= 0.85) || v.confidence >= 0.9) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: 0.6, level: 'amber', severity: 'minor', why: WT.two + v.verdict + ') — ' + (v.vwhy || ''), window: v.window, hits: v.hits, unsure: true })
+      else if ((v.hits >= 2 && v.confidence >= 0.85) || v.confidence >= 0.9) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: 0.6, level: 'amber', severity: 'minor', why: (v.hits >= 2 ? WT.two + v.verdict + ') — ' : WT.unsure + '(' + v.verdict + ') — ') + (v.vwhy || ''), window: v.window, hits: v.hits, unsure: true })
     }
     stageDone('verify', t)
     return { tileResults, candidates, verified, findings, allTiles: allTiles.length, droppedOutside }
@@ -440,6 +443,7 @@ export async function inspect(img, opts) {
             dRefText += `Image ${dRefImgs.length} is a CORRECT piece of this same product (whole garment, approved reference${REF_SIDE[ref.side] ? ', its ' + REF_SIDE[ref.side] + ' side' : ''}): the designs on it show how they are supposed to look — a stroke that exists there is intended${refs.length > 1 ? '; use the side that matches the inspected garment' : ''}. `
           } catch (e) { warn('decor', e) }
         }
+        if (dRefImgs.length && !dex.length) dRefText += 'The LAST image is the magnified close-up to inspect; the image(s) before it are the reference piece. '
         await mapLimit(sel, 4, async (b) => {
           checkAbort()
           const m = 0.15 * Math.max(b.x2 - b.x1, b.y2 - b.y1)
@@ -463,7 +467,7 @@ export async function inspect(img, opts) {
         // two looks (and neighbouring designs) report the same spot twice: keep the most confident within 60 px
         decorFindings.sort((a, b) => b.confidence - a.confidence)
         for (let i = decorFindings.length - 1; i > 0; i--) if (decorFindings.some((o, j) => j < i && Math.hypot(o.x - decorFindings[i].x, o.y - decorFindings[i].y) < 80)) decorFindings.splice(i, 1)
-      } catch (e) { warn('decor', e) }
+      } catch (e) { if (e && e.name === 'AbortError') throw e; warn('decor', e) }   // Cancel propagates; anything else degrades to a warning
       stageDone('decor', tD)
     }
 
@@ -515,7 +519,7 @@ export async function inspect(img, opts) {
             const j1 = r1.json || {}, j2 = r2.json || {}
             const both = !!j1.different && !!j2.different
             const j = both ? (clamp(+j1.confidence || 0, 0, 1) <= clamp(+j2.confidence || 0, 0, 1) ? j1 : j2) : (!j1.different ? j1 : j2)
-            parts.mirror = { different: both, confidence: clamp(+j.confidence || 0, 0, 1), differences: j.differences || [], why: j.why || '', votes: [!!j1.different, !!j2.different] }
+            parts.mirror = { different: both, confidence: clamp(+j.confidence || 0, 0, 1), differences: Array.isArray(j.differences) ? j.differences.map(String) : (j.differences ? [String(j.differences)] : []), why: j.why || '', votes: [!!j1.different, !!j2.different] }
             if (both && parts.mirror.confidence >= LEVELS.amber) {
               mirrorFindings.push({ kind: 'global', source: 'mirror', type: 'asymmetry', x: Math.round((B.x1 + B.x2) / 2), y: Math.round((B.y1 + B.y2) / 2), confidence: parts.mirror.confidence, level: level(parts.mirror.confidence), severity: 'major', why: (parts.mirror.differences[0] || parts.mirror.why) })
             }
@@ -534,12 +538,14 @@ export async function inspect(img, opts) {
         const gMax = opts.globalMaxSide || 1600
         const gs = Math.min(1, gMax / Math.max(region.w, region.h))
         const b64 = await img.jpeg({ ...region, resize: { w: Math.round(region.w * gs), h: Math.round(region.h * gs) }, quality: JQ })
-        const imgs = [b64]
+        const imgs = [b64], sides = []
         for (const ref of refs) {                                   // front and/or back of the correct piece — the prompt says which is which
-          const R = ref.image, rs = Math.min(1, gMax / Math.max(R.width, R.height))
-          imgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) }, quality: JQ }))
+          try {
+            const R = ref.image, rs = Math.min(1, gMax / Math.max(R.width, R.height))
+            imgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) }, quality: JQ })); sides.push(ref.side)
+          } catch (e) { warn('global-ref', e) }                     // a broken reference drops out; the pass still runs
         }
-        const r = await spark(api, PROMPTS.global(refs.map(r => r.side)) + WL, imgs, 'low')
+        const r = await spark(api, PROMPTS.global(sides) + WL, imgs, 'low')
         acct(r.usage)
         globalFindings = ((r.json && r.json.findings) || []).map(f => { const c = clamp(+f.confidence || 0, 0, 1); return { kind: 'global', source: 'global', type: String(f.type || 'other'), ...gridToPx(f.x, f.y, region), confidence: c, level: level(c), severity: 'major', why: f.why || '' } }).filter(f => f.confidence >= LEVELS.amber)
       } catch (e) { warn('global', e) }
@@ -559,7 +565,7 @@ export async function inspect(img, opts) {
     if (f.source !== 'decor') return true
     const twin = L.findings.find(l => { const d = Math.hypot(l.x - f.x, l.y - f.y); return d < 40 || (d < 150 && l.type === f.type) })
     if (!twin) return true
-    if (f.confidence > twin.confidence) Object.assign(twin, { type: f.type, confidence: f.confidence, level: level(f.confidence), severity: f.severity, why: f.why + (twin.why ? ' · ' + twin.why : ''), decor: true })
+    if (f.confidence > twin.confidence) Object.assign(twin, { type: f.type, confidence: f.confidence, level: level(f.confidence), severity: f.severity, why: f.why + (twin.why && !twin.unsure ? ' · ' + twin.why : ''), decor: true, unsure: false })   // the close-up's reading replaces an unsure one entirely
     return false
   })
 

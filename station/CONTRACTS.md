@@ -248,6 +248,19 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   RLS is off on the demo tables), the list is re-read and the new order selected (`selectOrder(order_number)`, also used by the sample buttons).
   Every tablet request to the phone carries the tablet's `order` and `side`; the phone's `followTablet(p)` switches to them before it acts (re-reading
   the list when it does not know the order), so the piece is saved under the order chosen on the review screen.
+- **Review fixes (Oct 31)**: every tablet request gets a `pending` ack at once (the camera revival / order re-read can outlast `ACK_WAIT_MS`),
+  then the final ack; the signature is `sha256(code|req|ts)` with `ts` within `LINK_FRESH_MS` (60 s), `rtc-want` goes through `S.seenReq` too, and
+  a late `ack {url, model}` still applies the reference. `followTablet()` returns whether the phone stands on the tablet's order; a `capture` is
+  refused otherwise. On the camera device a failed auto-save shows on `#camLast`, returns to the camera, retries once after 3 s, and a failed
+  job that gets detached raises the retry banner; `sendState().err` carries it. `saveReview` works on a snapshot (decision / findings / order /
+  photo) and touches the screen only while it still shows that piece; `_exPending` on each finding makes the learning examples survive a retry;
+  navigation, overlay taps and decisions wait while `S.reviewBusy`. `resetInspection` hides `#decisionBar`; the history view loads `preview.jpg`
+  (fallback `photo.jpg`). References: the side is fixed at confirm time; the download timeout covers the body. «➕»: Cancel aborts, a bad type
+  aborts, the number comes from a fresh list and a 409 retries once; an empty list still offers «➕»; `#btnRemoteRefClear` on the link bar.
+  Pipeline: a tile reply without a `defects` array warns (`tile` when every pass failed, `tile-pass` when one did) instead of reading as clean;
+  the close-up override clears `unsure`; «seen in two tiles» only with `hits ≥ 2`; a reference that fails to encode drops out of the global pass
+  (`global-ref` warn); a cancel during the close-ups propagates; mirror `differences` normalised. Worker: `DAILY_LIMIT` default 4000 (≈100
+  pieces per address per day — 400 was ≈10), the 5000-key eviction refuses new addresses only, an upstream fetch failure is a JSON 502.
 - **Station setup from the tablet** (Oct 29 — the phone hangs above the table, nobody reaches it): the review screen's link bar has `#btnRemoteBg`
   and `#btnRemoteRef` next to `#btnRemote`. They go through `requestRemote(kind, extra)` → link events `bg` / `ref` (same `req` + pairing `sig` as
   `capture`, one request at a time, `ack` within `ACK_WAIT_MS`); the phone's `remoteCommand(kind, p)` runs `captureBackground()` (the empty-table
