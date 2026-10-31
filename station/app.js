@@ -1330,6 +1330,7 @@ async function openReview(h) {
     }
     S.res = { garmentBox: h.garment_box || null }; S.incomplete = h.incomplete || null      // the phone's failed model calls must not read as «clean» here either
     S.framing = h.framing || null; showFraming(S.framing); showCheck(h.summary || null)
+    if (h.usage) showCost({ usage: h.usage, timings: h.timings || {}, tiles: h.tiles || 0 })   // the phone's model calls, visible on the tablet too (Nov 1: judges want the live Meta calls on screen); older rows without usage keep the line empty
     S.findings = (rows || []).map((r) => ({ id: r.id, kind: r.kind, source: r.source, type: r.type, x: r.x, y: r.y, confidence: +r.confidence || 0, level: r.level, severity: r.severity, why: r.why || '', crop_path: r.crop_path, verdict: r.verdict || null, verdict_at: r.verdict_at || null, worker_name: r.worker_name || null, stage: r.stage || null, _workerId: r.worker_name ? String((S.workers.find((w) => w.name === r.worker_name) || {}).id || '') : '', unsure: /مش متأكد|شافوها بلاطتين|خيط أم وبرة|^Not sure|two tiles|^Thread or lint/.test(r.why || '') }))
     S.decision = null
     renderAll(); renderStrip(); renderLive(); $('decisionBar').hidden = false; $('tapHint').hidden = !S.imgW
@@ -1452,6 +1453,7 @@ async function openHistory(h) {
   resetInspection(); setView('history'); $('btnBack').textContent = MODE === 'review' ? t('⬅ رجوع للمراجعة') : t('⬅ رجوع للكاميرا')
   const seq = ++S.histSeq                                        // a later tap on another thumbnail invalidates this one
   $('viewTitle').textContent = t('فحص #{id} · {order} · {side} · {dec} · {by} · {time}', { id: h.id, order: h.order_number || '', side: SIDE_AR[h.side] || '', dec: (DEC_EMOJI[h.decision] || '') + ' ' + (DEC_AR[h.decision] || t('بلا قرار')), by: h.inspector || '', time: hhmm(h.created_at) })
+  if (h.usage) $('viewTitle').textContent += ` · ${h.usage.calls || 0} Spark · ${h.usage.sam_calls || 0} SAM · ${(((h.timings || {}).total || 0) / 1000).toFixed(0)} s`   // the model calls behind this piece, on the tablet's history view too (Nov 1)
   const prev = h.photo_path ? h.photo_path.replace(/photo\.jpg$/, 'preview.jpg') : null
   const p = h.annotated_path || prev                               // preview.jpg is there from the release; photo.jpg may land later (or never, if the phone's upload died)
   const ph = $('photo'); clear($('overlay'))

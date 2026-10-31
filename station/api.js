@@ -164,7 +164,7 @@ export function makeDb(cfg) {
       : []),
 
     recentInspections: (limit = 12) => call('recentInspections', 'GET', restUrl('vision_inspections', {
-      select: 'id,created_at,order_number,model_code,side,photo_path,annotated_path,n_red,n_amber,decision,inspector,width,height,garment_box,incomplete:result->incomplete,framing:result->framing,summary:result->summary',   // width/height/garment_box: the review screen draws the circles on the preview
+      select: 'id,created_at,order_number,model_code,side,photo_path,annotated_path,n_red,n_amber,decision,inspector,width,height,garment_box,incomplete:result->incomplete,framing:result->framing,summary:result->summary,usage:result->usage,timings:result->timings,tiles:result->tiles',   // width/height/garment_box: the review screen draws the circles on the preview; usage/timings/tiles: the tablet shows the same «N Spark · M SAM · s · $» line as the phone (Nov 1)
       order: 'created_at.desc', limit: String(limit),
     })),
 

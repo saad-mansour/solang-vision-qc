@@ -41,11 +41,11 @@ async function get(table, filter) {
 let inspectionId, findingId, exampleId, statsBefore
 
 try {
-  await check('listOrders() → 5 rows W26-101..105', async () => {
+  await check('listOrders() → the seeded W26-101..105 first (orders added from the tablet may follow)', async () => {
     const rows = await db.listOrders()
-    ok(Array.isArray(rows) && rows.length === 5, 'expected 5 rows, got ' + (rows && rows.length))
+    ok(Array.isArray(rows) && rows.length >= 5, 'expected at least 5 rows, got ' + (rows && rows.length))
     const nums = rows.map(r => r.order_number)
-    ok(nums.join(',') === 'W26-101,W26-102,W26-103,W26-104,W26-105', 'unexpected order_numbers: ' + nums.join(','))
+    ok(nums.slice(0, 5).join(',') === 'W26-101,W26-102,W26-103,W26-104,W26-105', 'unexpected order_numbers: ' + nums.join(','))
     for (const k of ['order_number', 'model_code', 'product', 'garment', 'color', 'line', 'reference_url']) ok(k in rows[0], 'missing column ' + k)
     return nums.join(' ')
   })
