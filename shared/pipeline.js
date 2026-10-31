@@ -163,14 +163,14 @@ export function silhouette(raster, w, h) {
   const topRows = Math.max(2, Math.round(h * 0.06)); const xs = []
   for (let y = 0; y < topRows; y++) for (let x = 0; x < w; x++) if (raster[y * w + x]) xs.push(x)
   xs.sort((a, b) => a - b); const cx = xs.length ? xs[Math.floor(xs.length / 2)] : Math.floor(w / 2)
-  let maxL = 0, maxR = 0, reachL = 0, reachR = 0, area = 0, yL = 0, yR = 0
+  let maxL = 0, maxR = 0, reachL = 0, reachR = 0, area = 0, yL = 0, yR = 0, xL = cx, xR = cx   // (xL,yL) / (xR,yR): the farthest point of each side — the cuff / hem tip, where the marker goes
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (raster[y * w + x]) {
     area++
     const d = Math.hypot(x - cx, y)
-    if (x < cx) { if (d > maxL) { maxL = d; yL = y }; if (cx - x > reachL) reachL = cx - x } else { if (d > maxR) { maxR = d; yR = y }; if (x - cx > reachR) reachR = x - cx }
+    if (x < cx) { if (d > maxL) { maxL = d; yL = y; xL = x }; if (cx - x > reachL) reachL = cx - x } else { if (d > maxR) { maxR = d; yR = y; xR = x }; if (x - cx > reachR) reachR = x - cx }
   }
   const pct = (a, b) => Math.round(1000 * Math.abs(a - b) / Math.max(a, b, 1)) / 10
-  return { cx, area, maxL, maxR, yL, yR, lenDiffPct: pct(maxL, maxR), reachL, reachR, reachDiffPct: pct(reachL, reachR) }
+  return { cx, area, maxL, maxR, yL, yR, xL, xR, lenDiffPct: pct(maxL, maxR), reachL, reachR, reachDiffPct: pct(reachL, reachR) }
 }
 
 // ── Geometry ──────────────────────────────────────────────────────────────────
@@ -549,7 +549,9 @@ export async function inspect(img, opts) {
         parts.lengthDiffPct = agree
         if (agree >= th.amber) {
           const shorterLeft = s.maxL < s.maxR
-          const across = shorterLeft ? Math.round(s.cx - s.reachL / 2) : Math.round(s.cx + s.reachR / 2), along = shorterLeft ? s.yL : s.yR   // across the shoulders / along the length, in the measured frame
+          // the marker sits on the tip of the shorter part (its cuff / hem), in the measured frame → back to photo axes (Oct 31: the old mid-sleeve
+          // estimate landed on the floor next to a sleeve laid diagonally)
+          const across = shorterLeft ? s.xL : s.xR, along = shorterLeft ? s.yL : s.yR
           const px = mask.left + (parts.sideways ? along : across), py = mask.top + (parts.sideways ? across : along)
           const conf = clamp(0.55 + (agree - th.amber) / (th.red - th.amber) * 0.35, 0.55, 0.95)
           silFindings.push({ kind: 'global', source: 'silhouette', type: 'length', x: Math.round(px / scale), y: Math.round(py / scale), confidence: conf, level: agree >= th.red ? 'red' : 'amber', severity: 'major',
