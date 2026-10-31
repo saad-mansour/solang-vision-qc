@@ -129,7 +129,7 @@ export const EN = {
   // framing
   'فوق': 'top', 'تحت': 'bottom', 'شمال': 'left', 'يمين': 'right', ' و': ' and ',
   'القطعة طالعة برّا الكادر من {sides}': 'The garment is cut off at the {sides}',
-  'القطعة صغيرة بالصورة ({p}٪) — قرّب الكاميرا': 'The garment is small in the frame ({p}%) — move the camera closer',
+  'القطعة صغيرة بالصورة ({p}٪) — نزّل الكاميرا لحد ما تملّي القطعة عرض الصورة': 'The garment is small in the frame ({p}%) — lower the camera until the garment spans the width of the photo',
   'في شي غير القطعة عالطاولة (إيد / عصاية / غرض) — شيلو': 'Something other than the garment is on the table (hand / stick / object) — remove it',
 
   // empty table

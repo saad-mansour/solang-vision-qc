@@ -86,7 +86,10 @@ export function framingCheck({ focus, box, rawBox, W, H, smallPct = 55, edgeCell
     if (eb.x + eb.w >= (1 - edgeFrac) * W) cut.push('right')
   }
   const areaPct = box ? Math.round(1000 * (box.w * box.h) / (W * H)) / 10 : 0
-  return { cut, small: !!box && areaPct < smallPct, areaPct }
+  // «small» only when the camera CAN come closer: a piece that already spans 80 % of the frame's width or height (sleeves out, upright
+  // sweatshirt in a portrait frame) cannot grow without being cut — no warning then (Saad, Oct 31: «how do I come closer, it will not fit»)
+  const fills = !!box && (box.w / W >= 0.8 || box.h / H >= 0.8)
+  return { cut, small: !!box && areaPct < smallPct && !fills, areaPct }
 }
 
 // exposure-normalised absolute difference against the empty table, pooled into the full-res cell grid
