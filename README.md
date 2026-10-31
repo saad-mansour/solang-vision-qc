@@ -100,8 +100,9 @@ dashed (blue in the harness's annotated JPEGs).
 ## Meta tooling used
 
 - **SAM 3.1** through the Responses API with a text concept prompt and
-  `metadata: { include_confidence: 'true', mask_encoding: 'one_bit' }`. Used three ways: garment box, garment mask,
-  and part boxes (`pant leg` / `sleeve`).
+  `metadata: { include_confidence: 'true', mask_encoding: 'one_bit' }`. Used five ways: garment box, garment mask,
+  part boxes (`pant leg` / `sleeve`), the embroidered and printed designs (step 8), and the cuffs, collar and hems
+  (step 9) — every close-up starts from a SAM box, never from a guess.
 - **`@meta-sam/parser` 0.1.0** (vendored, unmodified) parses the SAM output stream and decodes the one-bit mask to a
   raster (`parseImageStream`, `recordsOfKind`, `decodeMaskToRaster`). The raster is what the silhouette measurement
   runs on.
@@ -280,13 +281,13 @@ domain expert → human in the loop, with the speed/accuracy trade-off made expl
 | Layer | What it is here | Where |
 |---|---|---|
 | **Deterministic checks** | Every model answer must parse as the exact JSON shape; defect types are whitelisted; coordinates are clamped to the photo; candidates that land off the garment mask are dropped; a tile with less than 8 % garment is never sent; a failed model call marks the run **incomplete** instead of letting it read as «clean»; no garment box → the run stops. The proxy allow-lists models and reasoning effort and refuses other origins. | `shared/pipeline.js`, `_worker.js` |
-| **LLM-as-judge** | Every tile candidate is re-judged on a 2× crop with a tri-state answer (defect / lint / texture / unsure) and, if not confirmed, on a 3× crop; lint and texture are dropped. The mirror comparison needs two independent «different» votes. Each tile and each design is asked twice and the answers merge (a spot seen twice counts twice). | pipeline steps 4, 6, 8 |
+| **LLM-as-judge** | Every tile candidate is re-judged on a 2× crop with a tri-state answer (defect / lint / texture / unsure) and, if not confirmed, on a 3× crop; lint and texture are dropped. The mirror comparison needs two independent «different» votes and is amber at most. Each tile and each design is asked twice and the answers merge (a spot seen twice counts twice); the edge close-ups (step 9) use a stricter threshold (≥ 0.6) because a seam verdict comes from one look. | pipeline steps 4, 6, 8, 9 |
 | **Ground truth from the domain expert** | The inspector's confirmed and rejected crops of the same product ride along with the judge and with the design close-ups as labelled references; a reference photo of a correct piece per product rides along with the global pass and the close-ups. | `vision_examples`, `demo_orders.reference_url` |
 | **Human in the loop** | Every spot is confirmed or rejected by the inspector, who can also add spots the camera missed; the piece's decision (pass / repair / reject) is hers alone; a run that was incomplete says so on her screen. | the review screen |
-| **Speed vs accuracy, measured** | The high-recall tile prompt costs +50 % tokens for the same wall-clock; asking twice +40 % and +3 s; the design close-ups +4 s. All three are on, by the factory's choice, after they surfaced defects the strict version missed. | README build log, Oct 28 |
+| **Speed vs accuracy, measured** | The high-recall tile prompt costs +50 % tokens for the same wall-clock; asking twice +40 % and +3 s; the design close-ups +4 s; the edge close-ups +7–9 s in parallel with the other stages (no change in wall-clock on a good connection). All four are on, by the factory's choice, after each surfaced a defect the previous version missed. | README build log, Oct 28–31 |
 
 The station shows this on every piece: «🔎 tiles raised N candidates · the magnified check confirmed K and dropped M ·
-design close-ups: D» (`result.summary`), so the inspector sees the filter working rather than wondering why 8 became 3.
+design close-ups: D · edges and seams: E» (`result.summary`), so the inspector sees the filter working rather than wondering why 8 became 3.
 
 ## Safety and privacy
 
@@ -373,6 +374,20 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
   (`decorPasses: 2`; one look missed it on that capture, two looks found it 2 of 2). The «thread or lint?» card now also
   needs a tile confidence ≥ 0.55 — a dark speck the inspector called «not a defect» had slipped through on tile insistence alone. Harness flags `--tile`, `--overlap`, `--tile-effort`,
   `--strict`, `--passes` for such A/Bs.
+
+- **Oct 29–31 — first days on the real table.** Every piece was being saved under one order and the back of a hoodie next to a
+  front reference read as «a different print»: one reference per side, the tablet's order and side ride on every shot
+  request, «➕ new product» in the order list, and the tablet drives the empty-table photo and the reference shots (the
+  phone hangs above the table). A six-lens review (20 agents) found 14 real defects — a failed auto-save that stranded the
+  phone, a review save that could write onto the next piece's row, a daily request cap of 400 that would have stopped a
+  factory address after ten pieces — all fixed. The factory lays every piece sideways to fit the table, so the silhouette
+  and the mirror now work in the garment's own frame instead of assuming neck-up (that lay had produced «sleeve 25 %
+  shorter» and three «different cuff» alarms). The mirror is amber at most and switches off for a product the inspector
+  rejected it on twice. The real catch of the day: a sleeve 1.5 cm shorter than the other, confirmed with a tape, that the
+  operator had not noticed. The real misses: a red pen mark on orange and an oil stain on light gray (contrast), and an open
+  cuff seam about 15 px wide — magnified three times the model reads it at 85 %, so step 9 (cuffs, collar, hems) was added
+  and found it on the next run with no false alarm on the other photos of the day. Numbers so far, 20 pieces: 40 spots
+  shown, 19 confirmed, 21 rejected, 4 added by the inspector (camera misses) — precision 48 % on judged spots, recall 83 %.
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.
 
