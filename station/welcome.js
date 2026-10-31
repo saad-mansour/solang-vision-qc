@@ -15,8 +15,8 @@ const TEXT = {
     howTitle: 'How to try it — one phone is enough',
     steps: [
       'Tap «📷 Start the camera» and allow it when the browser asks. The back camera works best.',
-      'Lay one garment flat on a plain table and fill the frame with it. Hold the phone still: it shoots by itself when the scene is steady (or tap the big 📸 button). No garment or camera? Tap «🧪 Try a sample» — two factory photos with known defects come with the page.',
-      'In 15–25 seconds you get numbered circles: red = likely defect, amber = worth a look, blue = overall (symmetry, length). Tap ✓ or ✗ on each card, pick a decision and save — your verdicts become reference examples for the next inspection of the same product.',
+      'Lay one garment flat on a plain table and fill the frame with it. Hold the phone still: it shoots by itself when the scene is steady (or tap the big 📸 button). No garment or camera? Tap «🧪 Try a sample» — three factory photos with known defects (one straight from the inspection table) come with the page.',
+      'In 25–60 seconds (longer on a slow Wi-Fi) you get numbered circles: red = likely defect, amber = worth a look, blue = overall (symmetry, length). Tap ✓ or ✗ on each card, pick a decision and save — your verdicts become reference examples for the next inspection of the same product.',
     ],
     notes: [
       'After this card a setup screen asks what this device is — choose «One device» to try it on your own.',
@@ -31,8 +31,8 @@ const TEXT = {
     howTitle: 'كيف تجرّب — موبايل واحد بيكفي',
     steps: [
       'اكبس «📷 شغّل الكاميرا» واسمح للمتصفح لما يسألك. الكاميرا الخلفية أفضل.',
-      'افرد قطعة وحدة على طاولة سادة وعبّي الكادر فيها. ثبّت الموبايل: بيصوّر لحالو لما يهدا المشهد (أو اكبس زر 📸 الكبير). ما معك قطعة ولا كاميرا؟ اكبس «🧪 جرّب صورة جاهزة»: صورتين من المصنع بعيوب معروفة مرفقتين مع الصفحة.',
-      'خلال 15–25 ثانية بتطلع دواير مرقّمة: أحمر = عيب مرجّح، برتقالي = بدها نظرة، أزرق = عام (تناظر، طول). اكبس ✓ أو ✗ على كل كرت، اختار القرار واحفظ — أحكامك بتصير أمثلة مرجعية للفحص الجاي من نفس الموديل.',
+      'افرد قطعة وحدة على طاولة سادة وعبّي الكادر فيها. ثبّت الموبايل: بيصوّر لحالو لما يهدا المشهد (أو اكبس زر 📸 الكبير). ما معك قطعة ولا كاميرا؟ اكبس «🧪 جرّب صورة جاهزة»: تلات صور من المصنع بعيوب معروفة مرفقتين مع الصفحة.',
+      'خلال 25 إلى 60 ثانية (أكتر على واي فاي بطيء) بتطلع دواير مرقّمة: أحمر = عيب مرجّح، برتقالي = بدها نظرة، أزرق = عام (تناظر، طول). اكبس ✓ أو ✗ على كل كرت، اختار القرار واحفظ — أحكامك بتصير أمثلة مرجعية للفحص الجاي من نفس الموديل.',
     ],
     notes: [
       'بعد هالكرت بتطلع شاشة الإعداد وبتسأل شو هاد الجهاز — اختار «جهاز واحد» للتجربة لحالك.',
