@@ -107,6 +107,8 @@
         <!-- live view of the phone camera (WebRTC, same Wi-Fi only — station/live.js); small tile while a piece is open, tap to enlarge -->
         <div id="liveWrap" class="liveWrap" hidden>
           <video id="liveView" autoplay muted playsinline></video>
+          <!-- the same dashed frame the phone shows: the inspector frames the piece from here (Saad, Oct 31: «I cannot see the frame from the tablet») -->
+          <div class="guide"></div>
           <!-- the frame at the moment the phone confirmed the shot: shown still while the phone inspects, until the piece opens -->
           <canvas id="liveStill" class="liveStill" hidden></canvas>
           <span id="liveCap" class="liveCap">📡 عم وصل بث الكاميرا…</span>
