@@ -274,6 +274,7 @@ export const EN = {
   'تلقائي': 'Auto', 'المزيد': 'More', 'اقلب': 'Flip', 'افحص': 'Inspect', 'خيارات': 'Options', '📶 فحص الاتصال': '📶 Connection check',
   'ما معك قطعة ولا كاميرا؟ جرّب صورة من المصنع:': 'No garment or camera at hand? Try a factory photo:',
   '🧪 سويت شيرت برتقالي (خيط طالع + خرم)': '🧪 Orange sweatshirt (loose thread + hole)', '🧪 بنطلون زهري (خرم + بقعة)': '🧪 Pink pants (hole + stain)',
+  '🧪 جرّب صورة جاهزة: هودي': '🧪 Try a sample: hoodie', '🧪 هودي أحمر بناتي (خيط عالتطريز + بقعة)': '🧪 Red hoodie, girls (thread on the embroidery + stain)',
   '🧪 جرّب صورة جاهزة: سويت شيرت': '🧪 Try a sample: sweatshirt', '🧪 جرّب صورة جاهزة: بنطلون': '🧪 Try a sample: pants',
   'عم حمّل الصورة الجاهزة…': 'Loading the sample photo…', 'عينة': 'sample', 'ما قدرت حمّل الصورة الجاهزة: ': 'Could not load the sample photo: ',
   '📶 عم قيس سرعة الرفع…': '📶 Measuring upload speed…', 'ضعيف': 'weak', 'متوسط': 'medium', 'منيح': 'good',
