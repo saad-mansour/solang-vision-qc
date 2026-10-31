@@ -310,6 +310,12 @@ design close-ups: D» (`result.summary`), so the inspector sees the filter worki
   the design close-ups); next: measure its effect on repeated false alarms over a week of real inspections. Once those
   verdicts are in the hundreds, fine-tune **Muse Glimmer** on them (Fireworks offers free Glimmer training through
   November) into a SOLANG-specific defect classifier that pre-screens the tiles before Spark looks.
+- **Measurements against the size spec.** The silhouette step already measures from the SAM mask in pixels (it caught a
+  sleeve 1.5 cm shorter than the other on Oct 31, which the operator had not noticed). Next: a scale on the table (a 10 cm
+  printed square in a corner, or a one-time calibration with an A4 sheet since the phone is fixed) and a spec table per
+  model and size (body length, chest width, sleeve length, tolerance) → a card «body length 42 cm, spec 44 ± 1». The
+  inspector picks the size before the shot; the piece must lie flat and neck-up. Realistic accuracy on knits about ±1 cm,
+  so it flags «out of tolerance by 2 cm», not half a centimetre.
 - Recall on tiny holes and faint stains: the high-recall tile prompt and the second pass are in; what is left is smaller
   tiles on dark plain fabrics and a 24 MP input path (the Camera-app photo picked with 📁 already finds what 12 MP misses).
 - Fewer extra amber flags: use the inspector's rejections per fabric to raise the amber threshold where lint is common.
