@@ -267,6 +267,12 @@ Dev flow: `node dev/serve.mjs` → open `http://localhost:8787/station/`. Deskto
   vertically (`flipV` in all three image adapters) — no warning, no skip. `opts.mirror === 'off'` (station: `db.mirrorVerdicts(model_code)` — embedded filter on `vision_inspections!inner` — gave ≥ 2 rejected
   and 0 confirmed) skips the mirror too (`parts.mirror.skipped`). A mirror finding is amber at most (`confidence ≤ 0.79`, `severity minor`).
   `framingCheck` `smallPct` is 55 (was 6): under 55 % of the frame the station asks to bring the camera closer.
+- **Edges close-up (step 9, Oct 31 night)**: `edgeStep()` next to `decorStep()` — SAM concepts `sleeve cuff` / `collar` / `bottom hem` (pants:
+  `waistband` / `trouser leg hem`), boxes 0.05 % of the frame … 25 % of the garment, IoU > 0.3 merged, ≤ `opts.edgeMax` (4), each padded 25 %,
+  magnified ≤ 3× to ~1000 px, `PROMPTS.edge` (seam-only), `opts.edgeEffort` ('low'); defects ≥ 0.6 → `source: 'edge'` findings (type
+  stitching | unfinished_edge | loose_thread | hole), dedup 80 px, merged against the tile findings like decor (`edge: true` on an overridden
+  twin). `opts.edges === false` skips it. `result.edges {found, sent, boxes}`, `summary.edge`, `timings.edges`, progress event `edges {count}`;
+  the station shows «الحواف والدرزات عن قرب: N» in the 🔎 line and the tag «حافة/درزة» on the card. Harness: `--no-edges`.
 - **Station setup from the tablet** (Oct 29 — the phone hangs above the table, nobody reaches it): the review screen's link bar has `#btnRemoteBg`
   and `#btnRemoteRef` next to `#btnRemote`. They go through `requestRemote(kind, extra)` → link events `bg` / `ref` (same `req` + pairing `sig` as
   `capture`, one request at a time, `ack` within `ACK_WAIT_MS`); the phone's `remoteCommand(kind, p)` runs `captureBackground()` (the empty-table

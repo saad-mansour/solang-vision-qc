@@ -60,7 +60,7 @@ if (arg('--bg', null)) {
   else console.log('  ! --bg ignored: different frame size than the photo')
 }
 const t0 = Date.now()
-const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), references: refs, concurrency: +arg('--conc', 6) || 6, foreground: fg, tileSize: +arg('--tile', 1200) || 1200, overlap: +arg('--overlap', 200) || 200, tileEffort: arg('--tile-effort', 'low'), tilePrompt: process.argv.includes('--strict') ? 'strict' : 'recall', tilePasses: +arg('--passes', 1) || 1, decor: !process.argv.includes('--no-decor'), lang: arg('--lang', 'ar'), decorPasses: +arg('--decor-passes', 1) || 1, decorEffort: arg('--decor-effort', 'low'), focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
+const res = await inspect(img, { api, samParser, garment: arg('--garment', 'garment'), references: refs, concurrency: +arg('--conc', 6) || 6, foreground: fg, tileSize: +arg('--tile', 1200) || 1200, overlap: +arg('--overlap', 200) || 200, tileEffort: arg('--tile-effort', 'low'), tilePrompt: process.argv.includes('--strict') ? 'strict' : 'recall', tilePasses: +arg('--passes', 1) || 1, decor: !process.argv.includes('--no-decor'), edges: !process.argv.includes('--no-edges'), lang: arg('--lang', 'ar'), decorPasses: +arg('--decor-passes', 1) || 1, decorEffort: arg('--decor-effort', 'low'), focus: process.argv.includes('--no-focus') ? 'off' : 'paint', requireGarment: !process.argv.includes('--no-require'), onProgress: (st, info) => { if (st === 'warn') console.log('  ! warn', JSON.stringify(info)) } })
 const name = path.basename(file).replace(/\.[^.]+$/, '')
 fs.writeFileSync(path.join(outDir, name + '.json'), JSON.stringify(res, null, 1))
 // annotate: downscale to 1600 and draw circles (red ≥0.8, amber ≥0.5, blue = global/measurement)
@@ -75,11 +75,12 @@ svg += '</svg>'
 await sharp(img.buffer).resize(ow, oh).composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).jpeg({ quality: 88 }).toFile(path.join(outDir, name + '_annotated.jpg'))
 const cost = (res.usage.input_tokens * 1.25 + res.usage.output_tokens * 4.25) / 1e6 + 0.0025 * res.usage.sam_calls
 console.log(`\n${name}: ${res.tiles} tiles · ${res.candidates.length} candidates → ${res.findings.length} findings · ${(Date.now() - t0) / 1000}s · tokens in ${res.usage.input_tokens} out ${res.usage.output_tokens} · ~$${cost.toFixed(3)}`)
-console.log('  timings:', ['garment', 'tiles', 'verify', 'parts', 'global', 'total'].map(k => `${k} ${((res.timings[k] || 0) / 1000).toFixed(1)}s`).join(' | '))   // stages overlap after garment; total = wall-clock
+console.log('  timings:', ['garment', 'tiles', 'verify', 'parts', 'global', 'decor', 'edges', 'total'].map(k => `${k} ${((res.timings[k] || 0) / 1000).toFixed(1)}s`).join(' | '))   // stages overlap after garment; total = wall-clock
 console.log('  garment:', res.garmentBox ? `${res.garmentBox.concept} c=${res.garmentBox.c && res.garmentBox.c.toFixed(2)} box ${res.garmentBox.w}x${res.garmentBox.h} mask=${res.hasMask}` : (res.noGarment ? 'NOT FOUND — run stopped (noGarment)' : 'not found (whole image)'))
 console.log('  focus:', res.focus ? `${res.focus.sent}/${res.focus.tiles} tiles sent (${res.focus.skipped} table tiles skipped) · ${res.focus.droppedOutside} candidates outside the garment dropped · painted=${res.focus.painted} · margin ${res.focus.marginPx} px` : 'off (no mask)', '· framing:', JSON.stringify(res.framing))
 res.findings.forEach((f, i) => console.log(`  ${i + 1}. [${f.level}] ${f.source}/${f.type} ${Math.round(f.confidence * 100)}% at (${f.x},${f.y})${f.hits ? ' hits=' + f.hits : ''}${f.unsure ? ' (unsure)' : ''} — ${f.why}`))
 if (res.parts) console.log('  parts:', JSON.stringify({ part: res.parts.part, silhouette: res.parts.silhouette, mirror: res.parts.mirror && { different: res.parts.mirror.different, c: res.parts.mirror.confidence, votes: res.parts.mirror.votes } }))
 if (res.decor) console.log('  decor:', JSON.stringify(res.decor))
+if (res.edges) console.log('  edges:', JSON.stringify(res.edges))
 if (res.summary) console.log('  verification:', JSON.stringify(res.summary), res.references && res.references.length ? '· references: ' + res.references.join(' + ') : '')
 console.log('  rejected:', res.verified.filter(v => ['lint', 'texture'].includes(v.verdict)).map(v => `${v.type}@(${v.x},${v.y}) ${v.verdict}${v.second ? '+' + v.second.verdict : ''}`).join(' | ') || 'none')

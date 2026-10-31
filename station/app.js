@@ -490,6 +490,7 @@ function onProgress(stage, info) {
     case 'parts': S.progG = t('عم قارن اليمين بالشمال…'); two(); break
     case 'global': S.progG = t('نظرة عامة…'); two(); break
     case 'decor': S.progG = info.count ? t('عم فحص {n} تطريز/طباعة عن قرب…', { n: info.count }) : S.progG; two(); break
+    case 'edges': S.progG = info.count ? t('عم فحص {n} حافة/درزة عن قرب…', { n: info.count }) : S.progG; two(); break
     case 'stage_done':
       if (info.stage === 'verify') S.progL = t('النقاط المحلية خلصت ✓')
       if (info.stage === 'global') S.progG = ''
@@ -511,6 +512,7 @@ function showCheck(s) {
   let txt = t('🔎 البلاطات لقطت {n} مرشّح · التأكيد المكبّر أكّد {k} وشال {m}', { n: s.candidates, k: s.confirmed, m: s.dropped })
   if (s.unsure) txt += t(' · {u} مش متأكد (قرارك)', { u: s.unsure })
   if (s.decor) txt += t(' · التطريز عن قرب: {d}', { d: s.decor })
+  if (s.edge) txt += t(' · الحواف والدرزات عن قرب: {e}', { e: s.edge })
   if (s.global) txt += t(' · النظرة العامة والمقارنة: {g}', { g: s.global })
   e.textContent = txt
 }
@@ -705,6 +707,7 @@ function cardHead(f, i) {
   head.appendChild(el('span', 'conf', Math.round((+f.confidence || 0) * 100) + '%'))
   if (f.kind === 'global') head.appendChild(el('span', 'tag', f.source === 'silhouette' ? t('قياس') : f.source === 'mirror' ? t('مقارنة') : t('عام')))
   if (f.source === 'decor' || f.decor) head.appendChild(el('span', 'tag', t('تطريز/طباعة')))
+  if (f.source === 'edge' || f.edge) head.appendChild(el('span', 'tag', t('حافة/درزة')))
   if (f.unsure) head.appendChild(el('span', 'tag unsure', t('مش متأكد')))
   if (f.severity === 'major' && f.source !== 'inspector') head.appendChild(el('span', 'tag unsure', t('كبير')))
   head.addEventListener('click', () => highlightMark(i))

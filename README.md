@@ -18,7 +18,7 @@ the system can learn from the people who actually know the garments.
 
 ![How one piece is inspected](docs/how-it-works.png)
 
-One photo (typically 3024×4032 from the phone's browser camera, 4284×5712 from its camera app) goes through eight steps. Everything runs in the browser; the
+One photo (typically 3024×4032 from the phone's browser camera, 4284×5712 from its camera app) goes through nine steps. Everything runs in the browser; the
 only server is a thin proxy that holds the API key. The method is documented in [`shared/pipeline.js`](shared/pipeline.js).
 
 1. **Find the garment — SAM 3.1.** A downscaled copy is sent with a concept prompt (`pants`, `sweatshirt`, …).
@@ -57,6 +57,12 @@ only server is a thin proxy that holds the API key. The method is documented in 
    on its own for loose embroidery thread ends, skipped or broken stitches, cracked or missing print. A thread end on an
    embroidered eye is 2 px in the corner of a tile; here the design fills the model's view. Findings the tiles already
    confirmed within 150 px are not reported twice.
+9. **Cuffs, collar and hems close-ups — SAM 3.1 + Muse Spark.** SAM is asked for the sleeve cuffs, the collar and the
+   bottom hem (waistband and leg hems on pants); each is cut from the full-resolution photo, magnified up to 3× and
+   Spark is asked only about the seam: open or unstitched sections, skipped stitches, a raw edge, a band not fully
+   attached, a hole at the seam. Added on Oct 31 after an open cuff seam on a pink sweatshirt — about 15 px at 12 MP —
+   went past the tiles; magnified three times, the same spot reads at 85 %. Strict threshold (≥ 0.6), merged with the
+   tile findings like step 8; zero false alarms on the three other photos of that day.
 
 ```
  phone/tablet above the QC table

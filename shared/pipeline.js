@@ -94,6 +94,12 @@ export const PROMPTS = {
     'Compare the construction: seam lines and their positions along the body, panel shapes, pocket or decoration position, stitching lines. Ignore wrinkles, lighting, shadows, how the fabric is laid, the angle of the hem/cuff edge (it depends on the lay), and differences in where the crop was cut. A cuff or hem turned up, folded under or twisted, a hood or the body lying over one part, and a rib cuff that is hidden by a fold are all how the piece lies, not construction differences. ' +
     'Are there real construction differences a quality inspector would reject (seams in different positions or angles, missing or extra seam, different panel shape, decoration in a different place)? ' +
     'Answer ONLY JSON: {"different":true|false,"confidence":0-1,"differences":["short description with location"],"why":"one sentence"}',
+  // step 9: cuffs, collar, hems and waistband magnified — the seam defects a tile cannot see at native scale (Oct 31: an open cuff seam on a pink
+  // sweatshirt, ~15 px at 12 MP, invisible to the tiles, read at 85 % once the cuff was magnified three times)
+  edge: 'You are a strict garment quality inspector. This is a magnified close-up of ONE edge of a children\'s garment lying flat: a sleeve cuff, a collar or neckband, a bottom hem, a waistband or a leg hem. ' +
+    'Look only at the construction of that edge: an open or unstitched section of a seam, a seam that has come undone, skipped or broken stitches, a raw or unfinished edge, a band or cuff not fully attached, a hole at the seam, thread ends hanging from the seam. ' +
+    'Ignore folds, wrinkles, shadows, the fabric texture, the rib knit pattern and the normal stitch line itself. Be strict: report only what you can actually see. ' +
+    'Answer ONLY JSON: {"defects":[{"type":"stitching|unfinished_edge|loose_thread|hole|other","x":0-1000,"y":0-1000,"confidence":0-1,"why":"one sentence"}]} with coordinates on a 0-1000 grid of this image; if nothing, {"defects":[]}.',
   global: (sides, sideways) => 'You are a senior garment quality inspector. The garment may lie in any orientation on the table (sideways, upside down): judge the print placement and the parts relative to the garment itself (neck to hem), never relative to the photo frame — a print that reads sideways only because the garment lies sideways is correct. ' + (sideways ? 'This garment LIES SIDEWAYS in the photo (its neck is at the left or the right edge, its sleeves or legs point up and down), so its print is expected to read vertically. ' : '') + 'Do NOT report the orientation of a print or text: text on a drawstring, ribbon, label, cuff or hem runs along that part, and a print that reads sideways or upside down in the photo is the lay, not a defect. ' + refIntro(sides) +
     'Report only GLOBAL defects that need the whole garment to see: misplaced, missing or incomplete print or decoration, missing part (button, snap, drawstring, label), twisted or misaligned seam across the body, wrong proportions. ' +
     'Do not report tiny local spots (holes, threads, stains) and do not judge leg/sleeve length here. Be conservative: wrinkles, folds and how the piece is laid do not count. ' +
@@ -272,7 +278,7 @@ export async function inspect(img, opts) {
   const usage = { input_tokens: 0, output_tokens: 0, calls: 0, sam_calls: 0 }
   const acct = (u) => { usage.input_tokens += (u && u.input_tokens) || 0; usage.output_tokens += (u && u.output_tokens) || 0; usage.calls += 1 }
   // pre-seeded so the key order stays stable even though the branches finish in any order (stages overlap; total = wall-clock)
-  const timings = { garment: 0, tiles: 0, verify: 0, silhouette: 0, parts: 0, global: 0, total: 0 }
+  const timings = { garment: 0, tiles: 0, verify: 0, silhouette: 0, parts: 0, global: 0, decor: 0, edges: 0, total: 0 }
   const refs = refList(opts)   // the correct piece of this product: [{ image, side }], ≤ 2 (see refIntro)
   const W = img.width, H = img.height
   const g = GARMENTS[opts.garment] || GARMENTS.garment
@@ -411,8 +417,8 @@ export async function inspect(img, opts) {
   // ── branch G: 4) silhouette (no model call) → 5) parts/mirror → 6) global pass. Findings kept in that order.
   async function globalBranch() {
     const parts = { part: g.part, measure: g.measure, boxes: [], silhouette: null, lengthDiffPct: null, mirror: null }
-    const silFindings = [], mirrorFindings = [], decorFindings = []
-    let globalFindings = [], decor = null
+    const silFindings = [], mirrorFindings = [], decorFindings = [], edgeFindings = []
+    let globalFindings = [], decor = null, edges = null
 
     // ── 8) embroidery / print close-ups: SAM finds the designs on the garment, each one is cut from the full-resolution photo, magnified
     //       (up to 3×) and inspected on its own — a thread end on an embroidered eye is 2 px in the corner of a tile; here the design fills the view
@@ -472,6 +478,47 @@ export async function inspect(img, opts) {
         for (let i = decorFindings.length - 1; i > 0; i--) if (decorFindings.some((o, j) => j < i && Math.hypot(o.x - decorFindings[i].x, o.y - decorFindings[i].y) < 80)) decorFindings.splice(i, 1)
       } catch (e) { if (e && e.name === 'AbortError') throw e; warn('decor', e) }   // Cancel propagates; anything else degrades to a warning
       stageDone('decor', tD)
+    }
+    // ── 9) edges close-up: SAM finds the cuffs / collar / hem (or waistband / leg hems), each is cut from the full-resolution photo and magnified
+    //       up to 3×, and Spark is asked only about the seam. opts.edges === false skips it; opts.edgeMax (default 4) caps the crops.
+    async function edgeStep() {
+      checkAbort()
+      const tE = Date.now()
+      if (opts.edges === false || garmentFailed || !garmentBox) return
+      try {
+        const concepts = g.measure === 'leg' ? ['waistband', 'trouser leg hem'] : ['sleeve cuff', 'collar', 'bottom hem']
+        const texts = await Promise.all(concepts.map(c => samRaw(api, c, small).then(t => { usage.sam_calls += 1; return t }).catch(e => { warn('edges', e); return '' })))
+        let boxes = []
+        for (const t of texts) if (t) boxes.push(...boxesToFull(parseSamBoxes(t).filter(b => b.c == null || b.c >= 0.4), scale, region, 0))
+        const gArea = region.w * region.h
+        boxes = boxes.map(b => ({ ...b, area: (b.x2 - b.x1) * (b.y2 - b.y1) })).filter(b => b.area >= 0.0005 * W * H && b.area <= 0.25 * gArea).sort((p, q) => q.area - p.area)
+        const iou = (a, b) => { const ix = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1)), iy = Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1)), i = ix * iy; return i / (a.area + b.area - i) }
+        const kept = []
+        for (const b of boxes) if (!kept.some(k => iou(k, b) > 0.3)) kept.push(b)
+        const sel = kept.slice(0, opts.edgeMax || 4)
+        edges = { found: kept.length, sent: sel.length, boxes: sel.map(b => ({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1) })) }
+        progress('edges', { count: sel.length })
+        await mapLimit(sel, 4, async (b) => {
+          checkAbort()
+          const m = 0.25 * Math.max(b.x2 - b.x1, b.y2 - b.y1)
+          const x1 = clamp(Math.round(b.x1 - m), 0, W - 2), y1 = clamp(Math.round(b.y1 - m), 0, H - 2), x2 = clamp(Math.round(b.x2 + m), x1 + 2, W), y2 = clamp(Math.round(b.y2 + m), y1 + 2, H)
+          const abs = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
+          const up = Math.min(3, Math.max(1, 1000 / Math.max(abs.w, abs.h)))
+          try {
+            const b64 = await img.jpeg({ ...abs, resize: { w: Math.round(abs.w * up), h: Math.round(abs.h * up) }, quality: JQ })
+            const r = await spark(api, PROMPTS.edge + WL, [b64], opts.edgeEffort || 'low')
+            acct(r.usage)
+            for (const d of ((r.json && Array.isArray(r.json.defects)) ? r.json.defects : [])) {
+              const c = clamp(+d.confidence || 0, 0, 1); if (c < 0.6) continue                     // stricter than the tiles: a seam verdict from one look
+              const p = gridToPx(d.x, d.y, abs)
+              edgeFindings.push({ kind: 'local', source: 'edge', type: ['stitching', 'unfinished_edge', 'loose_thread', 'hole'].includes(d.type) ? d.type : 'stitching', x: p.x, y: p.y, confidence: c, level: level(c), severity: c >= LEVELS.red ? 'major' : 'minor', why: d.why || '' })
+            }
+          } catch (e) { warn('edges', e) }
+        })
+        edgeFindings.sort((a, b) => b.confidence - a.confidence)
+        for (let i = edgeFindings.length - 1; i > 0; i--) if (edgeFindings.some((o, j) => j < i && Math.hypot(o.x - edgeFindings[i].x, o.y - edgeFindings[i].y) < 80)) edgeFindings.splice(i, 1)
+      } catch (e) { if (e && e.name === 'AbortError') throw e; warn('edges', e) }
+      stageDone('edges', tE)
     }
 
     // the two part boxes (sleeves / legs), from the SAM call sent in step 1 — used by the silhouette AND the mirror below.
@@ -578,8 +625,8 @@ export async function inspect(img, opts) {
       } catch (e) { warn('global', e) }
       stageDone('global', tGl)
     }
-    await Promise.all([partsStep(), globalStep(), decorStep()])
-    return { parts, decor, findings: [...silFindings, ...mirrorFindings, ...globalFindings, ...decorFindings] }
+    await Promise.all([partsStep(), globalStep(), decorStep(), edgeStep()])
+    return { parts, decor, edges, findings: [...silFindings, ...mirrorFindings, ...globalFindings, ...decorFindings, ...edgeFindings] }
   }
 
   // both branches only need step 1's region / mask / small image → run them side by side (an abort in either rejects the whole inspection)
@@ -589,10 +636,10 @@ export async function inspect(img, opts) {
   // but the close-up's reading wins when it is more confident (a frayed thread tail at an embroidered eye read as a «snag» from the tile,
   // «stray thread tails outside the outline» from the close-up: same spot, the second wording is the one the inspector needs)
   const gFindings = G.findings.filter(f => {
-    if (f.source !== 'decor') return true
+    if (f.source !== 'decor' && f.source !== 'edge') return true   // the close-ups (designs, edges) against the tile findings
     const twin = L.findings.find(l => { const d = Math.hypot(l.x - f.x, l.y - f.y); return d < 40 || (d < 150 && l.type === f.type) })
     if (!twin) return true
-    if (f.confidence > twin.confidence) Object.assign(twin, { type: f.type, confidence: f.confidence, level: level(f.confidence), severity: f.severity, why: f.why + (twin.why && !twin.unsure ? ' · ' + twin.why : ''), decor: true, unsure: false })   // the close-up's reading replaces an unsure one entirely
+    if (f.confidence > twin.confidence) Object.assign(twin, { type: f.type, confidence: f.confidence, level: level(f.confidence), severity: f.severity, why: f.why + (twin.why && !twin.unsure ? ' · ' + twin.why : ''), [f.source === 'edge' ? 'edge' : 'decor']: true, unsure: false })   // the close-up's reading replaces an unsure one entirely
     return false
   })
 
@@ -600,10 +647,11 @@ export async function inspect(img, opts) {
   const summary = {
     candidates: L.candidates.length, confirmed: L.findings.filter(f => !f.unsure).length, unsure: L.findings.filter(f => f.unsure).length,
     dropped: Math.max(0, L.candidates.length - L.findings.length), decor: gFindings.filter(f => f.source === 'decor').length + L.findings.filter(f => f.decor).length,
-    global: gFindings.filter(f => f.source !== 'decor').length,
+    edge: gFindings.filter(f => f.source === 'edge').length + L.findings.filter(f => f.edge).length,
+    global: gFindings.filter(f => !['decor', 'edge'].includes(f.source)).length,
   }
   return {
-    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...gFindings], parts: G.parts, decor: G.decor, summary, references: refs.map(r => r.side || 'any'), usage, timings,
+    width: W, height: H, garmentBox, hasMask: !!mask, tiles: L.tileResults.length, candidates: L.candidates, verified: L.verified, findings: [...L.findings, ...gFindings], parts: G.parts, decor: G.decor, edges: G.edges, summary, references: refs.map(r => r.side || 'any'), usage, timings,
     framing, focus: focus ? { tiles: L.allTiles, sent: L.tileResults.length, skipped: L.allTiles - L.tileResults.length, droppedOutside: L.droppedOutside, painted: paint, marginPx: focus.margin * focus.cell } : null,
   }
 }
