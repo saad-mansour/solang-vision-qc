@@ -33,7 +33,8 @@ const LINK_STATE_MS = 2000, PEER_TTL_MS = 7000, ACK_WAIT_MS = 4000, LINK_FRESH_M
 const LIVE_RETRY_MS = 8000, LIVE_GRACE_MS = 5000                      // the tablet asks for the live view again when no frame arrived within 8 s; a stall shorter than 5 s keeps the last frame
 const LIVE_ON_MS = 90000                                               // «📡 شوف الكاميرا» keeps the live view for 90 s (another tap extends it); the shot closes it
 const SVG_NS = 'http://www.w3.org/2000/svg'
-const BIG_PHOTO = 30 * 1024 * 1024           // JPEG originals are uploaded as-is below this (a 24 MP phone JPEG is 5–7 MB); only non-JPEG picks are re-encoded
+const BIG_PHOTO = 3 * 1024 * 1024            // JPEG originals above this are re-encoded at PHOTO_Q before the upload (the iPhone's 12 MP shots are 7–9 MB and sat on the factory uplink while the next piece's tiles waited — Oct 31); the pixel size stays, so x/y still match
+const PHOTO_Q = 0.8
 
 // ── state ────────────────────────────────────────────────────────────────────
 const S = {
@@ -893,7 +894,7 @@ async function prepareBlobs(job) {
   // the original JPEG is stored untouched (its pixels are what x/y refer to); a HEIC/PNG pick or an oversized file is re-encoded,
   // which the image adapter caps at 4096 px — that case is flagged in result.photo_scaled
   const reencode = (blob.type && blob.type !== 'image/jpeg') || blob.size > BIG_PHOTO
-  const photo = reencode ? await img.blob({ ...full, quality: 0.9 }) : blob
+  const photo = reencode ? await img.blob({ ...full, quality: PHOTO_Q }) : blob
   job.photoScaled = reencode
   // clean 1600 px preview for the review screen (10× lighter than the photo; circles are drawn live from the DB rows there)
   let preview = null
