@@ -193,7 +193,7 @@ async function addOrderFlow() {
   const gRaw = prompt(t('نوع القطعة؟ 1 هودي · 2 سويت شيرت · 3 بنطلون · 4 تيشيرت'), '1'); if (gRaw == null) { back(); return }   // Cancel = nothing added
   const garment = GARMENT_CHOICES[(+gRaw.trim().replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))) - 1]   // Arabic-Indic digits welcome
   if (!garment) { toast(t('نوع القطعة لازم يكون رقم من 1 لـ4 — ما انضاف شي'), 4000); back(); return }
-  const cRaw = prompt(t('اللون (اختياري):')); if (cRaw == null) { back(); return }
+  const cRaw = prompt(t('اللون (اختياري):')); resumeCamera(); if (cRaw == null) { back(); return }
   const color = cRaw.trim()
   const number = () => { const n = Math.max(100, ...S.orders.map((o) => +((String(o.order_number).match(/^W26-(\d+)$/) || [])[1] || 0))) + 1; return { order_number: 'W26-' + n, model_code: GARMENT_CODE[garment] + '-26-' + n } }
   let row = null
@@ -240,7 +240,7 @@ async function uploadReferenceFrom(img, modelCode) {
 }
 async function setReferenceFromCurrent() {
   const o = S.order, side = S.side; if (!o || !o.model_code || !S.db) { toast(t('ما في طلبية مختارة')); return }   // the side as confirmed, whatever is tapped during the upload
-  if (!confirm(t('تعتمد هالقطعة مرجع {side} صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code, side: SIDE_AR[side] }))) return
+  const okC = confirm(t('تعتمد هالقطعة مرجع {side} صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code, side: SIDE_AR[side] })); resumeCamera(); if (!okC) return
   try {
     toast(t('عم أحفظ المرجع…'))
     let url = null
@@ -252,14 +252,14 @@ async function setReferenceFromCurrent() {
 }
 async function setReferenceFromFile(file) {
   const o = S.order, side = S.side; if (!o || !o.model_code || !S.db) { toast(t('ما في طلبية مختارة')); return }
-  if (!confirm(t('تعتمد هالصورة مرجع {side} صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code, side: SIDE_AR[side] }))) return
+  const okF = confirm(t('تعتمد هالصورة مرجع {side} صح للموديل {m}؟ (بتنبدّل القديمة إذا في)', { m: o.model_code, side: SIDE_AR[side] })); resumeCamera(); if (!okF) return
   let img = null
   try { toast(t('عم أحفظ المرجع…')); img = await fromBlob(file); await storeReference(o.model_code, await uploadReferenceFrom(img, o.model_code), side) }
   catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) } finally { safeClose(img) }
 }
 async function clearReference() {
   const o = S.order, side = S.side; if (!o || !o.model_code || !S.db) return
-  if (!confirm(t('تشيل مرجع {side} للموديل {m}؟', { m: o.model_code, side: SIDE_AR[side] }))) return
+  const okR = confirm(t('تشيل مرجع {side} للموديل {m}؟', { m: o.model_code, side: SIDE_AR[side] })); resumeCamera(); if (!okR) return
   try { await storeReference(o.model_code, null, side) } catch (e) { toast(t('ما قدرت أحفظ المرجع: ') + msg(e), 4000) }
 }
 // the reference photo as an image adapter for the pipeline (≤ 5 s, anything wrong → none)
@@ -1019,8 +1019,21 @@ async function linkOk(p) {
   if (!(p && p.req && p.sig && Number.isFinite(+p.ts)) || Math.abs(Date.now() - +p.ts) > LINK_FRESH_MS) return false
   return (await linkSig(p.req + '|' + p.ts)) === p.sig
 }
+// iOS Safari pauses the camera stream behind a native dialog (prompt / confirm) and does not always resume it (Saad, Oct 31: «the camera
+// hangs after I type the pairing code»): after any dialog on a camera device, nudge the <video>, and restart the camera if the track stayed muted
+function resumeCamera() {
+  if (MODE === 'review' || !S.cam) return
+  const v = $('video'), tr = S.cam.track
+  setTimeout(() => {
+    if (!S.cam || S.cam.track !== tr) return
+    if (!tr || tr.readyState === 'ended') { startCamera(); return }
+    if (v.paused) v.play().catch(() => {})
+    setTimeout(() => { if (S.cam && S.cam.track === tr && (tr.muted || v.paused) && !S.running && !S.capturing) startCamera() }, 1500)
+  }, 300)
+}
 function setLinkCode() {
   const v = prompt(t('رمز الربط بين الموبايل والتابلت (نفسو عالجهازين؛ فاضي = بلا رمز):'), linkCode())
+  resumeCamera()
   if (v == null) return
   if (v.trim()) lsSet('vqc_link_code', v.trim()); else { try { localStorage.removeItem('vqc_link_code') } catch (e) { /* ignore */ } }
   toast(v.trim() ? t('🔑 انحفظ رمز الربط') : t('انشال رمز الربط')); renderLink()
