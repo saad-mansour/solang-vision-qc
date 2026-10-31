@@ -90,11 +90,11 @@ export const PROMPTS = {
     'Answer ONLY JSON: {"verdict":"defect|lint|texture|unsure","type":"hole|snag|stain|loose_thread|stitching|puckering|unfinished_edge|none","confidence":0-1,"severity":"minor|major","why":"one sentence"}',
   verifyRefs: (k) => `The first ${k} image${k > 1 ? 's are' : ' is'} REFERENCE crop${k > 1 ? 's' : ''} from earlier pieces of this SAME product, each already judged by the human inspector as listed. ` +
     'Use them to tell this product\'s normal prints, seams, labels and texture apart from real defects. The LAST image is the spot to judge now. ',
-  mirror: (part) => `Image 1 is the LEFT ${part} of a children's garment lying flat (top-down). Image 2 is the RIGHT ${part}, flipped horizontally so it should look like a mirror image of the left one. ` +
+  mirror: (part) => `Image 1 is one ${part} of a children's garment lying flat (top-down). Image 2 is the other ${part}, flipped so that it should look like a mirror image of the first one. ` +
     'Compare the construction: seam lines and their positions along the body, panel shapes, pocket or decoration position, stitching lines. Ignore wrinkles, lighting, shadows, how the fabric is laid, the angle of the hem/cuff edge (it depends on the lay), and differences in where the crop was cut. A cuff or hem turned up, folded under or twisted, a hood or the body lying over one part, and a rib cuff that is hidden by a fold are all how the piece lies, not construction differences. ' +
     'Are there real construction differences a quality inspector would reject (seams in different positions or angles, missing or extra seam, different panel shape, decoration in a different place)? ' +
     'Answer ONLY JSON: {"different":true|false,"confidence":0-1,"differences":["short description with location"],"why":"one sentence"}',
-  global: (sides) => 'You are a senior garment quality inspector. The garment may lie in any orientation on the table (sideways, upside down): judge the print placement and the parts relative to the garment itself (neck to hem), never relative to the photo frame — a print that reads sideways only because the garment lies sideways is correct. ' + refIntro(sides) +
+  global: (sides, sideways) => 'You are a senior garment quality inspector. The garment may lie in any orientation on the table (sideways, upside down): judge the print placement and the parts relative to the garment itself (neck to hem), never relative to the photo frame — a print that reads sideways only because the garment lies sideways is correct. ' + (sideways ? 'This garment LIES SIDEWAYS in the photo (its neck is at the left or the right edge, its sleeves or legs point up and down), so its print is expected to read vertically. ' : '') + 'Report a rotated print only when it is turned by about 90° or 180° relative to the neck-to-hem axis of the garment itself and you can see that axis clearly; when in doubt, do not report rotation. ' + refIntro(sides) +
     'Report only GLOBAL defects that need the whole garment to see: misplaced, rotated, missing or incomplete print or decoration, missing part (button, snap, drawstring, label), twisted or misaligned seam across the body, wrong proportions. ' +
     'Do not report tiny local spots (holes, threads, stains) and do not judge leg/sleeve length here. Be conservative: wrinkles, folds and how the piece is laid do not count. ' +
     'Answer ONLY JSON: {"findings":[{"type":"print|missing_part|stitching|other","x":0-1000,"y":0-1000,"confidence":0-1,"why":"one sentence"}]}. Coordinates are on a 0-1000 grid of Image 1. If none, {"findings":[]}.',
@@ -147,6 +147,9 @@ export async function maskForBox(text, samParser, box) {
   const best = masks.map(mr => ({ mr, s: iou(mr.bounds) })).sort((p, q) => q.s - p.s)[0]
   return maskOut(best.s >= 0.3 ? best.mr : masks.map(mr => ({ mr, a: maskArea(mr) })).sort((p, q) => q.a - p.a)[0].mr, samParser)
 }
+
+// raster (w × h, row-major) → its transpose (h × w): a garment lying sideways becomes upright for the silhouette measure
+export function transpose(r, w, h) { const t = new Uint8Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) t[x * h + y] = r[y * w + x]; return t }
 
 // Silhouette metrics from a binary raster: lengths measured from the top-center anchor (waistband / collar), so a splayed leg or a bent sleeve
 // changes little. Returns percentages of the longer side.
@@ -211,7 +214,7 @@ export function outputText(resp) {
 export const LEVELS = { red: 0.8, amber: 0.5 }
 export function level(conf) { return conf >= LEVELS.red ? 'red' : conf >= LEVELS.amber ? 'amber' : 'low' }
 // Length difference thresholds (% of the longer part). Tops need BOTH length and side-reach to agree (a bent sleeve fools one of them).
-export const LENGTH_DIFF = { leg: { amber: 5, red: 8 }, sleeve: { amber: 6, red: 10 } }
+export const LENGTH_DIFF = { leg: { amber: 5, red: 8 }, sleeve: { amber: 3.5, red: 10 } }   // sleeve amber 3.5 (Oct 31): a real 1.5 cm difference measured 3.8 % on the transposed mask; the same pieces laid again read 0.4–2.6 %
 
 export async function mapLimit(items, limit, fn) {
   const out = new Array(items.length)
@@ -485,22 +488,22 @@ export async function inspect(img, opts) {
     }
     if (pboxes.length === 2) {
       const cx = b => (b.x1 + b.x2) / 2, cy = b => (b.y1 + b.y2) / 2
-      parts.sideways = Math.abs(cy(pboxes[0]) - cy(pboxes[1])) > Math.abs(cx(pboxes[0]) - cx(pboxes[1]))
-      if (parts.sideways) { framing.sideways = true; progress('framing', framing) }
+      parts.sideways = Math.abs(cy(pboxes[0]) - cy(pboxes[1])) > Math.abs(cx(pboxes[0]) - cx(pboxes[1]))   // sleeves / legs stacked → the piece lies sideways (the table is wider than it is deep: the usual lay here)
     }
-    // ── 4) silhouette measurement from the SAM mask
+    // ── 4) silhouette measurement from the SAM mask — in the garment's own frame: a sideways piece is measured on the transposed mask
     checkAbort()
     let t = Date.now()
-    if (mask && g.measure && !parts.sideways) {
+    if (mask && g.measure) {
       try {
-        const s = silhouette(mask.raster, mask.w, mask.h)
+        const s = parts.sideways ? silhouette(transpose(mask.raster, mask.w, mask.h), mask.h, mask.w) : silhouette(mask.raster, mask.w, mask.h)
         parts.silhouette = { lenDiffPct: s.lenDiffPct, reachDiffPct: s.reachDiffPct, cx: s.cx }
         const th = LENGTH_DIFF[g.measure]
         const agree = g.measure === 'leg' ? s.lenDiffPct : Math.min(s.lenDiffPct, s.reachDiffPct)
         parts.lengthDiffPct = agree
         if (agree >= th.amber) {
           const shorterLeft = s.maxL < s.maxR
-          const px = mask.left + (shorterLeft ? Math.round(s.cx - s.reachL / 2) : Math.round(s.cx + s.reachR / 2)), py = mask.top + (shorterLeft ? s.yL : s.yR)
+          const across = shorterLeft ? Math.round(s.cx - s.reachL / 2) : Math.round(s.cx + s.reachR / 2), along = shorterLeft ? s.yL : s.yR   // across the shoulders / along the length, in the measured frame
+          const px = mask.left + (parts.sideways ? along : across), py = mask.top + (parts.sideways ? across : along)
           const conf = clamp(0.55 + (agree - th.amber) / (th.red - th.amber) * 0.35, 0.55, 0.95)
           silFindings.push({ kind: 'global', source: 'silhouette', type: 'length', x: Math.round(px / scale), y: Math.round(py / scale), confidence: conf, level: agree >= th.red ? 'red' : 'amber', severity: 'major',
             why: (g.measure === 'leg' ? WT.leg : WT.sleeve) + WT.shorter + agree + WT.approx, measure: { lenDiffPct: s.lenDiffPct, reachDiffPct: s.reachDiffPct } })
@@ -522,15 +525,20 @@ export async function inspect(img, opts) {
           // opts.mirror === 'off': the inspector rejected the mirror's «asymmetry» on this product twice already and never confirmed one —
           // the comparison is skipped for this product (two Spark calls fewer; the station decides from vision_findings)
           if (opts.mirror === 'off') parts.mirror = { skipped: 'rejected before on this product' }
-          else if (parts.sideways) parts.mirror = { skipped: 'garment lies sideways' }
           else if (boxes.length === 2) {
-            // equalize: same height span for legs (top of both → bottom of the longer), same width span for sleeves
-            let A = { ...boxes[0] }, B = { ...boxes[1] }
-            if (g.measure === 'leg') { const yTop = Math.min(A.y1, B.y1), yBot = Math.max(A.y2, B.y2); A.y1 = B.y1 = yTop; A.y2 = B.y2 = yBot }
-            else { const h = Math.max(A.y2 - A.y1, B.y2 - B.y1); A.y2 = A.y1 + h; B.y2 = B.y1 + h; const w = Math.max(A.x2 - A.x1, B.x2 - B.x1); A.x2 = A.x1 + w; B.x1 = B.x2 - w }   // الكفة الخارجية هي المرجع: شمال = x1، يمين = x2
+            // equalize: same span along the garment's length (legs: top of both → bottom of the longer), same reach for sleeves — the outer cuff is the anchor.
+            // Sideways piece: the parts are top / bottom, the axes swap, and the second part is flipped vertically instead of horizontally
+            const sw = !!parts.sideways
+            const ordered = sw ? [...boxes].sort((p, q) => p.y1 - q.y1) : boxes
+            let A = { ...ordered[0] }, B = { ...ordered[1] }
+            if (g.measure === 'leg') {
+              if (sw) { const xL = Math.min(A.x1, B.x1), xR = Math.max(A.x2, B.x2); A.x1 = B.x1 = xL; A.x2 = B.x2 = xR }
+              else { const yTop = Math.min(A.y1, B.y1), yBot = Math.max(A.y2, B.y2); A.y1 = B.y1 = yTop; A.y2 = B.y2 = yBot }
+            } else if (sw) { const w = Math.max(A.x2 - A.x1, B.x2 - B.x1); A.x2 = A.x1 + w; B.x2 = B.x1 + w; const h = Math.max(A.y2 - A.y1, B.y2 - B.y1); A.y2 = A.y1 + h; B.y1 = B.y2 - h }
+            else { const h = Math.max(A.y2 - A.y1, B.y2 - B.y1); A.y2 = A.y1 + h; B.y2 = B.y1 + h; const w = Math.max(A.x2 - A.x1, B.x2 - B.x1); A.x2 = A.x1 + w; B.x1 = B.x2 - w }   // the outer cuff is the anchor: left = x1, right = x2
             const clip = b => ({ x1: clamp(b.x1, 0, W - 2), y1: clamp(b.y1, 0, H - 2), x2: clamp(b.x2, 2, W), y2: clamp(b.y2, 2, H) })
             A = clip(A); B = clip(B)
-            const crop = (b, mirror) => img.jpeg({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1), resize: fit(b, 1200), mirror, quality: JQ })
+            const crop = (b, flip) => img.jpeg({ x: Math.round(b.x1), y: Math.round(b.y1), w: Math.round(b.x2 - b.x1), h: Math.round(b.y2 - b.y1), resize: fit(b, 1200), mirror: flip && !sw, flipV: flip && sw, quality: JQ })
             const [a, m] = await Promise.all([crop(A, false), crop(B, true)])
             // مرتين، ولازم الاتنين يقولوا «مختلف» (الحكم الواحد بيتأثر بطريقة الفرد) — الثقة = الأصغر
             const [r1, r2] = await Promise.all([spark(api, PROMPTS.mirror(g.part) + WL, [a, m], 'medium'), spark(api, PROMPTS.mirror(g.part) + WL, [a, m], 'medium')])
@@ -564,7 +572,7 @@ export async function inspect(img, opts) {
             imgs.push(await R.jpeg({ x: 0, y: 0, w: R.width, h: R.height, resize: { w: Math.round(R.width * rs), h: Math.round(R.height * rs) }, quality: JQ })); sides.push(ref.side)
           } catch (e) { warn('global-ref', e) }                     // a broken reference drops out; the pass still runs
         }
-        const r = await spark(api, PROMPTS.global(sides) + WL, imgs, 'low')
+        const r = await spark(api, PROMPTS.global(sides, !!parts.sideways) + WL, imgs, 'low')
         acct(r.usage)
         globalFindings = ((r.json && r.json.findings) || []).map(f => { const c = clamp(+f.confidence || 0, 0, 1); return { kind: 'global', source: 'global', type: String(f.type || 'other'), ...gridToPx(f.x, f.y, region), confidence: c, level: level(c), severity: 'major', why: f.why || '' } }).filter(f => f.confidence >= LEVELS.amber)
       } catch (e) { warn('global', e) }

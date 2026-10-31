@@ -51,11 +51,11 @@ export async function blobToBase64(blob) {
 
 // Every output pixel whose full-res source point is not kept becomes a flat color (≈ 1M predicate calls for a 1000 px tile, ~20 ms).
 // getImageData/putImageData ignore the canvas transform, so the mirror case maps the column back by hand.
-function paintOutside(ctx, ow, oh, r, keep, fill, mirror) {
+function paintOutside(ctx, ow, oh, r, keep, fill, mirror, flipV) {
   const f = Array.isArray(fill) && fill.length >= 3 ? fill : [128, 128, 128]
   const id = ctx.getImageData(0, 0, ow, oh), d = id.data, sx = r.w / ow, sy = r.h / oh
   for (let py = 0; py < oh; py++) {
-    const Y = r.y + (py + 0.5) * sy
+    const Y = r.y + ((flipV ? oh - 1 - py : py) + 0.5) * sy
     for (let px = 0; px < ow; px++) {
       const X = r.x + ((mirror ? ow - 1 - px : px) + 0.5) * sx
       if (!keep(X, Y)) { const i = (py * ow + px) * 4; d[i] = f[0]; d[i + 1] = f[1]; d[i + 2] = f[2] }
@@ -71,9 +71,9 @@ function makeAdapter(bitmap, source) {
   const alive = () => { if (closed) throw new Error('image adapter is closed') }
 
   // One crop of the bitmap into a fresh canvas of the output size.
-  // resize: {w,h} | {w} | {h} (missing side keeps aspect) | number (max side). mirror → horizontal flip.
+  // resize: {w,h} | {w} | {h} (missing side keeps aspect) | number (max side). mirror → horizontal flip, flipV → vertical flip (a sideways garment's mirror).
   // keep(X, Y) → false paints that output pixel `fill` (default mid gray): the pipeline hides the table around the garment this way.
-  function render({ x, y, w, h, resize, mirror, keep, fill } = {}) {
+  function render({ x, y, w, h, resize, mirror, flipV, keep, fill } = {}) {
     alive()
     const r = clampRect({ x, y, w, h }, W, H)
     let ow = r.w, oh = r.h
@@ -87,8 +87,9 @@ function makeAdapter(bitmap, source) {
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
     if (mirror) { ctx.translate(ow, 0); ctx.scale(-1, 1) }
+    if (flipV) { ctx.translate(0, oh); ctx.scale(1, -1) }
     ctx.drawImage(bitmap, r.x, r.y, r.w, r.h, 0, 0, ow, oh)
-    if (typeof keep === 'function') paintOutside(ctx, ow, oh, r, keep, fill, mirror)
+    if (typeof keep === 'function') paintOutside(ctx, ow, oh, r, keep, fill, mirror, flipV)
     return c
   }
   async function encode(opts, quality) {

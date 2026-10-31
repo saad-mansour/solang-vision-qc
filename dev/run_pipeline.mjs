@@ -22,15 +22,15 @@ async function adapter(file) {
   const m2 = await sharp(buf).metadata()
   return {
     width: m2.width, height: m2.height, buffer: buf,
-    async jpeg({ x, y, w, h, resize, mirror, keep, fill, quality }) {
+    async jpeg({ x, y, w, h, resize, mirror, flipV, keep, fill, quality }) {
       let s = sharp(buf).extract({ left: Math.round(x), top: Math.round(y), width: Math.round(w), height: Math.round(h) })
       if (resize) s = s.resize(Math.round(resize.w), Math.round(resize.h), { kernel: 'lanczos3' })
-      if (mirror) s = s.flop()
+      if (mirror) s = s.flop(); if (flipV) s = s.flip()
       if (typeof keep === 'function') {                                   // same contract as the browser adapter: pixels not kept → flat fill
         const { data, info } = await s.raw().toBuffer({ resolveWithObject: true })
         const f = Array.isArray(fill) ? fill : [128, 128, 128], sx = w / info.width, sy = h / info.height, ch = info.channels
         for (let py = 0; py < info.height; py++) {
-          const Y = y + (py + 0.5) * sy
+          const Y = y + ((flipV ? info.height - 1 - py : py) + 0.5) * sy
           for (let px = 0; px < info.width; px++) {
             const X = x + ((mirror ? info.width - 1 - px : px) + 0.5) * sx
             if (!keep(X, Y)) { const i = (py * info.width + px) * ch; data[i] = f[0]; data[i + 1] = f[1]; data[i + 2] = f[2] }

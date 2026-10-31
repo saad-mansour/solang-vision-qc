@@ -528,7 +528,6 @@ function framingText(f) {
   const parts = []
   if (f.cut && f.cut.length) parts.push(t('القطعة طالعة برّا الكادر من {sides}', { sides: f.cut.map((s) => SIDE_WORD[s] || s).join(t(' و')) }))
   if (f.small) parts.push(t('القطعة صغيرة بالصورة ({p}٪) — قرّب الكاميرا', { p: f.areaPct }))
-  if (f.sideways) parts.push(t('القطعة مايلة بالكادر (الرقبة مش لفوق) — ما قارنت الكمين وما قست الطول'))
   if (f.clutter >= 25) parts.push(t('صورة الطاولة الفاضية ما بتطابق الكادر ({p}٪ مختلف — الكاميرا تحركت؟) — عيد 🧹 أو شيلها', { p: Math.round(f.clutter) }))   // Oct 29: 40–53 % on every hand-held piece — that is the camera, not an object
   else if (f.clutter) parts.push(t('في شي غير القطعة عالطاولة (إيد / عصاية / غرض) — شيلو'))
   return parts.length ? '⚠ ' + parts.join(' · ') : ''
