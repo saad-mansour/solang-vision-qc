@@ -218,6 +218,9 @@ export function outputText(resp) {
 }
 
 export const LEVELS = { red: 0.8, amber: 0.5 }
+// A tile candidate the magnified check confirms with confidence below this is dropped, not shown. Set from the inspector's own verdicts
+// (47 inspections, Nov 2): confirmations at 60-69 % were real 2 times out of 10; at 70-79 % 7 of 13; at 80 %+ 21 of 30. opts.tileConfirmMin overrides.
+export const TILE_CONFIRM_MIN = 0.7
 export function level(conf) { return conf >= LEVELS.red ? 'red' : conf >= LEVELS.amber ? 'amber' : 'low' }
 // Length difference thresholds (% of the longer part). Tops need BOTH length and side-reach to agree (a bent sleeve fools one of them).
 export const LENGTH_DIFF = { leg: { amber: 5, red: 8 }, sleeve: { amber: 3.5, red: 10 } }   // sleeve amber 3.5 (Oct 31): a real 1.5 cm difference measured 3.8 % on the transposed mask; the same pieces laid again read 0.4–2.6 %
@@ -402,9 +405,11 @@ export async function inspect(img, opts) {
       } catch (e) { return { ...c, window: abs, verdict: 'error', error: String((e && e.message) || e) } }
     })
     const findings = []
+    const tileMin = opts.tileConfirmMin == null ? TILE_CONFIRM_MIN : +opts.tileConfirmMin
     for (const v of verified) {
       const type = v.vtype && v.vtype !== 'none' ? v.vtype : v.type
-      if (v.verdict === 'defect') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: v.vconfidence, level: level(Math.max(v.vconfidence, LEVELS.amber)), severity: v.severity, why: v.vwhy, window: v.window, hits: v.hits })   // a confirmed defect is at least amber
+      if (v.verdict === 'defect' && v.vconfidence >= tileMin) findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: v.vconfidence, level: level(Math.max(v.vconfidence, LEVELS.amber)), severity: v.severity, why: v.vwhy, window: v.window, hits: v.hits })   // a confirmed defect is at least amber
+      else if (v.verdict === 'defect') { /* confirmed below TILE_CONFIRM_MIN: dropped (it counts in summary.dropped) */ }
       else if (v.verdict === 'unsure' || v.verdict === 'error') findings.push({ kind: 'local', source: 'tiles', type, x: v.x, y: v.y, confidence: Math.min(0.79, v.confidence * 0.8), level: 'amber', severity: 'minor', why: WT.unsure + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
       // thread vs lint is the inspector's call: a thread end in the fabric's own colour reads as «lint» at 2× (Saad's pulled thread, Oct 28) — amber, not dropped
       else if ((v.type === 'loose_thread' || v.vtype === 'loose_thread') && (v.verdict === 'lint' || (v.second && v.second.verdict === 'lint')) && v.vconfidence < 0.8 && v.confidence >= 0.55) findings.push({ kind: 'local', source: 'tiles', type: 'loose_thread', x: v.x, y: v.y, confidence: 0.5, level: 'amber', severity: 'minor', why: WT.threadOrLint + (v.vwhy || v.why || ''), window: v.window, hits: v.hits, unsure: true })
