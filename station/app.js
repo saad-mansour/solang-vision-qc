@@ -41,7 +41,7 @@ const S = {
   cfg: null, api: null, db: null,
   orders: [], workers: [], order: null, side: 'front', inspector: '',
   view: 'camera',                              // camera | inspect | history
-  cam: null, facing: 'environment', det: null, sampleCanvas: null, loop: null, autoCapture: true, pillHold: 0, capturing: false,
+  cam: null, facing: 'environment', det: null, sampleCanvas: null, loop: null, autoCapture: true, pillHold: 0, capturing: false, blackTicks: 0, blackRestartAt: 0,
   running: false, controller: null, runStarted: 0, timer: null, warns: [], tilesDone: 0,
   img: null, blob: null, res: null, findings: [], decision: null,
   job: null,                                   // the save job of the current inspection (resumable on retry)
@@ -342,6 +342,19 @@ function fakeCamera(video) {
   return { stream, track, settings: { width: 640, height: 480 }, facing: 'environment', live: () => track.readyState === 'live', stop() { clearInterval(t); track.stop() }, onLost: null }
 }
 
+// iOS quirk (Nov 2, Saad's office): after the page was in the background or another app used the camera, the track still reports
+// «live» and unmuted but every frame is black; the stillness detector then sees a perfectly still scene, auto-shoots, and SAM answers
+// «no garment». A frame whose mean luma is under BLACK_LUMA is treated as a dead camera: no shot, restart the stream (once per 15 s).
+const BLACK_LUMA = 6, BLACK_TICKS = 8, BLACK_RESTART_MS = 15000
+function isBlack(gray) { let s = 0; for (let i = 0; i < gray.length; i++) s += gray[i]; return gray.length > 0 && s / gray.length < BLACK_LUMA }
+function cameraBlack(fromCapture) {
+  const now = Date.now(), restart = now - (S.blackRestartAt || 0) >= BLACK_RESTART_MS
+  if (fromCapture || restart) toast(t('الكاميرا طلّعت صورة سودا — عم أعيد تشغيلها'), 4000)   // a refused shot always says why; the sampler says it once per restart
+  if (!restart) return
+  S.blackRestartAt = now
+  startCamera()
+}
+
 // the track ended (OS took the camera, screen lock, another app): say so instead of silently re-shooting the frozen frame
 function cameraLost() {
   if (!S.cam) return
@@ -358,6 +371,8 @@ function sampleTick() {
   if (S.view !== 'camera' || S.running || S.capturing) return
   try {
     const gray = grayscaleSample(video, S.sampleCanvas, SAMPLE_W, SAMPLE_H)
+    if (isBlack(gray)) { if (++S.blackTicks >= BLACK_TICKS) { S.blackTicks = 0; cameraBlack() } return }   // never a «still» verdict on a black feed
+    S.blackTicks = 0
     const r = S.det.feed(gray, SAMPLE_W, SAMPLE_H, performance.now())
     setPill((r && r.state) || S.det.state)
   } catch (e) { /* a dropped frame is fine */ }
@@ -374,6 +389,7 @@ function setPill(state) {
 async function captureFromCamera(label) {
   if (S.running || S.capturing) { toast(t('في فحص شغّال — استنّي يخلص')); return }
   if (!S.cam) { toast(t('ما في كاميرا — استعمل «صورة من الجهاز»')); return }
+  try { if ($('video').readyState >= 2 && isBlack(grayscaleSample($('video'), S.sampleCanvas || (S.sampleCanvas = document.createElement('canvas')), SAMPLE_W, SAMPLE_H))) { cameraBlack(true); return } } catch (e) { /* sampling failed: let the shot decide */ }
   S.capturing = true
   try {
     const blob = await takePhoto(S.cam, $('video'))

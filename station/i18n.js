@@ -114,6 +114,7 @@ export const EN = {
   'الكاميرا ما اشتغلت على هالجهاز — استعمل «📁 صورة من الجهاز». ({err})': 'The camera did not start on this device — use «📁 Photo from device». ({err})',
   'الكاميرا وقفت — ': 'The camera stopped — ', '🔄 عيد تشغيل الكاميرا': '🔄 Restart the camera',
   'الكاميرا وقفت — عيد تشغيلها': 'The camera stopped — restart it',
+  'الكاميرا طلّعت صورة سودا — عم أعيد تشغيلها': 'The camera gave a black frame — restarting it',
   'في فحص شغّال — استنّي يخلص': 'An inspection is running — wait for it to finish',
   'ما في كاميرا — استعمل «صورة من الجهاز»': 'No camera — use «Photo from device»',
   'ما قدرت آخد الصورة: ': 'Could not take the photo: ',
