@@ -31,24 +31,42 @@ export function makeApi(cfg) {
   const base = String(cfg.PROXY_URL || '').replace(/\/+$/, '')   // '' → same origin ('/v1/responses')
   const headers = { 'Content-Type': 'application/json' }
   if (cfg.STATION_TOKEN) headers['X-Station-Token'] = cfg.STATION_TOKEN
+  // One model call may not hang the whole run (Nov 2, factory link: a piece sat at «local spots done» for 5 minutes on one stuck
+  // upload). Past CALL_TIMEOUT_MS the request is aborted and fails as a network error with .timeout = true — not retried (a retry
+  // re-uploads the same megabytes on the same link) — and the pipeline carries on and reports the call as failed.
+  const CALL_TIMEOUT_MS = Number(cfg.CALL_TIMEOUT_MS) > 0 ? Number(cfg.CALL_TIMEOUT_MS) : 90000
 
   async function once(json, signal) {
-    let r
+    if (signal && signal.aborted) throw abortError(signal)
+    const ac = new AbortController()
+    const onUser = () => ac.abort(abortError(signal))
+    if (signal) signal.addEventListener('abort', onUser, { once: true })
+    let timedOut = false
+    const timer = setTimeout(() => { timedOut = true; ac.abort(new Error('timeout')) }, CALL_TIMEOUT_MS)
     try {
-      r = await fetch(base + '/v1/responses', { method: 'POST', headers, body: json, signal })
-    } catch (e) {
-      if (signal && signal.aborted) throw e                 // cancelled by the caller: never retried
-      const err = new Error('network error: ' + ((e && e.message) || e))
-      err.network = true; err.status = 0; err.cause = e
-      throw err
-    }
-    if (!r.ok) {
-      const text = await r.text().catch(() => '')
-      const err = new Error('HTTP ' + r.status + ' ' + text.slice(0, 200))
-      err.status = r.status
-      throw err
-    }
-    return r.json()
+      let r
+      try {
+        r = await fetch(base + '/v1/responses', { method: 'POST', headers, body: json, signal: ac.signal })
+      } catch (e) {
+        if (signal && signal.aborted) throw e                 // cancelled by the caller: never retried
+        const err = new Error(timedOut ? 'timeout: no answer in ' + Math.round(CALL_TIMEOUT_MS / 1000) + ' s' : 'network error: ' + ((e && e.message) || e))
+        err.network = true; err.status = 0; err.cause = e; err.timeout = timedOut
+        throw err
+      }
+      if (!r.ok) {
+        const text = await r.text().catch(() => '')
+        const err = new Error('HTTP ' + r.status + ' ' + text.slice(0, 200))
+        err.status = r.status
+        throw err
+      }
+      try { return await r.json() }                            // the body can stall on the same slow link: the timer still covers it
+      catch (e) {
+        if (signal && signal.aborted) throw e
+        const err = new Error(timedOut ? 'timeout: answer cut off after ' + Math.round(CALL_TIMEOUT_MS / 1000) + ' s' : 'network error: ' + ((e && e.message) || e))
+        err.network = true; err.status = 0; err.cause = e; err.timeout = timedOut
+        throw err
+      }
+    } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', onUser) }
   }
 
   return {
@@ -62,6 +80,7 @@ export function makeApi(cfg) {
         return await once(json, signal)
       } catch (e) {
         if (!(e.network || RETRY_STATUS.has(e.status))) throw e
+        if (e.timeout) throw e                                                   // a call that already took CALL_TIMEOUT_MS: the run goes on without it
         if (e.status === 429 && /daily limit/i.test(e.message || '')) throw e   // the proxy's per-day cap: a retry only re-sends megabytes for the same answer
         await sleep(RETRY_DELAY_MS, signal)
         if (signal && signal.aborted) throw abortError(signal)
