@@ -16,7 +16,7 @@ the system can learn from the people who actually know the garments.
 
 ## How it works
 
-![How one piece is inspected](docs/how-it-works.png)
+![How one piece is inspected — nine steps](docs/how-it-works.png)
 
 One photo (typically 3024×4032 from the phone's browser camera, 4284×5712 from its camera app) goes through nine steps. Everything runs in the browser; the
 only server is a thin proxy that holds the API key. The method is documented in [`shared/pipeline.js`](shared/pipeline.js).
@@ -40,7 +40,10 @@ only server is a thin proxy that holds the API key. The method is documented in 
    When the inspector has already judged crops of this product, up to 3 *defect* and 3 *not a defect* examples from
    `vision_examples` ride along on both looks as labelled references — the learning loop.
 5. **Silhouette from the SAM mask — no model call.** Leg or sleeve length is measured from the waistband/collar
-   centre on the mask; a difference above 5 % (legs) or 6 % (sleeves) becomes a length finding.
+   centre on the mask, in the garment's own frame (a piece laid sideways is measured on the transposed mask); a
+   difference above 5 % (legs) or 3.5 % (sleeves) becomes an amber length finding, 8 % / 10 % red. No measurement
+   when the garment touches a frame edge (the cut side reads as the shorter one). See the results section for how
+   reliable this is: the direction is usually right, the number is only close when the sleeves lie parallel.
 6. **Mirror comparison — SAM 3.1 + Muse Spark.** SAM finds the two legs (or sleeves); the right one is flipped
    horizontally and compared with the left one. Spark is asked twice at `medium` effort, and both answers must say
    "different" before an asymmetry finding is raised (one answer alone is fooled by how the fabric is laid).
@@ -99,6 +102,10 @@ dashed (blue in the harness's annotated JPEGs).
 
 ## Meta tooling used
 
+**The only models called at runtime are Meta's: SAM 3.1 and Muse Spark 1.3, through the Meta Model API.** No other
+model, hosted or local, runs anywhere in the pipeline or the station; the rest is plain JavaScript (geometry on SAM's
+mask, pixel comparisons for the empty table and the stillness detector).
+
 - **SAM 3.1** through the Responses API with a text concept prompt and
   `metadata: { include_confidence: 'true', mask_encoding: 'one_bit' }`. Used five ways: garment box, garment mask,
   part boxes (`pant leg` / `sleeve`), the embroidered and printed designs (step 8), and the cuffs, collar and hems
@@ -123,11 +130,65 @@ the decision: pass / repair / reject. Nothing is auto-rejected.
 
 Every verdict is stored twice: as a row in `vision_findings` (the spot, the model's confidence and reasoning, the
 inspector's verdict and who caused it) and, for confirmed, added or rejected spots, as a 2× crop in `vision_examples`
-labelled `defect` or `not_defect` per model code. These are the training signal for the next step: feeding a model's
-own confirmed and rejected crops back as few-shot examples. Storing them is done; reading them back into the
-prompts is on the roadmap, not in the pipeline yet.
+labelled `defect` or `not_defect` per model code. They are read back on the next inspection of the same product: up to
+3 *defect* and 3 *not a defect* crops ride along in the verify step (step 4) as labelled references, so the magnified
+judge decides with the inspector's own history in front of it (the station shows «🧠 N examples» under the result).
+On the factory table this is what turned a missed seam thread into a catch: inspection #40 missed it and the inspector
+marked it; #41, on the same product with her two examples, found it at 85 %.
 
-## Preliminary results — 7 photos
+## Results — 38 inspections on the factory table (Oct 29 – Nov 1, 2026)
+
+Every number below comes from the demo database as it stands — `node dev/accuracy.mjs`, saved in
+[`docs/accuracy-2026-11-02.md`](docs/accuracy-2026-11-02.md) — and from the inspector's verdicts on each spot. The inspector
+was the co-founder himself. 38 inspections of about 15 physical pieces (the same piece was often inspected again after a
+change: a different lay, a new defect seeded on it, a re-take for the video); 10 of them are pieces believed clean. Most
+defects were real production defects; a few were **seeded on purpose** to test a specific check and are marked so below.
+
+| | |
+|---|---|
+| Inspections | **38** (front 32, back 6) — pass 10, repair 24, reject 4 |
+| Candidates raised by the tiles | 175 → the magnified check confirmed 49, flagged 6 unsure, dropped 120 (69 %) |
+| Spots shown to the inspector | **70** — confirmed **38**, rejected **32** → **precision 54 %** |
+| Spots the inspector added herself (camera misses) | **10** → **recall 79 %** on the spots she judged or added |
+| By level | red 44 spots, 71 % confirmed · amber 36 spots, 39 % confirmed |
+| By type | loose thread 21/25 confirmed (84 %) · hole 4/7 · sleeve length 5/8 · **stain 7/22 (32 %)** · mirror asymmetry 0/3 |
+| Time per piece | mean **70 s** on the factory Wi-Fi (min 29, max 207) — 25–45 s on a good link; the slow runs are uploads, not models |
+| Cost per piece | ≈ **$0.16** in Muse Spark tokens + ≈ $0.02 in SAM calls, about **$0.18**; the demo so far cost $5.90 |
+
+**What it caught (real production defects unless marked):** loose threads at seams, cuffs and hems (its strongest
+type); a 1.5 cm hole; a thread across a print (design close-up); a brown stain on a printed panel (seeded, design
+close-up, 85 %); an open cuff seam ≈ 15 px wide on a sweatshirt — invisible to the tiles, read at 85 % once step 9
+magnified the cuff; a seam thread on an olive hoodie on the third try, with the inspector's examples (the learning
+loop above); sleeve-length differences — see the next paragraph.
+
+**What it missed, honestly:** a red pen mark on orange fleece and an oil stain on light gray (contrast, under factory
+light); a white thread hanging over a white board (zero contrast — a background problem); an open seam at the hood,
+which step 9 does not cover (cuffs, collar, hem only — a 3× crop of that spot reads it at 75 %, so the extension is on
+the roadmap); and small stains in general: the stain type is the weak spot at 32 % precision, most of its false alarms
+being lint or a dark speck on light fabric.
+
+**The sleeve-length check, with the tape next to it.** Orange hoodie, real difference 1.5 cm = 5.1 % of the sleeve:
+flagged once (4.4 %, when the sleeves lay parallel), missed on six other lays (1.3–2.6 %). Gray hoodie, real difference
+1.5 cm = 3.2 %: flagged at 8.5 % — right direction, inflated 2.6× because one sleeve lay diagonally. Olive hoodie,
+1 cm: flagged at 7.9 % with the hood spread next to a sleeve. Pink hoodie with **equal** sleeves: 7.4 % false alarm on
+a diagonal lay, 0.8 % and no alarm once the sleeves were laid parallel and the hood folded. Test piece (pink blouse)
+with a seeded 4 cm difference: flagged at 3.6 %, tape 39 vs 43 cm. Reading: the check flags real differences but the
+percentage is a lay-dependent estimate, so the station says «rough estimate — check with a tape», the lay rule
+(sleeves parallel, hood folded, nothing cut off) is in the operator guide, and a measurement along the sleeve itself is
+on the roadmap. The tape stays the judge for differences under 2 cm.
+
+**Calibrated from the inspector's verdicts (Nov 2).** Tile findings the magnified check confirmed at 60–69 % confidence
+were real 2 times out of 10 (70–79 %: 7 of 13; 80 %+: 21 of 30), and every false alarm on that day's clean pieces sat in
+that band — so a confirmation below 0.70 is now dropped (`TILE_CONFIRM_MIN` in [`shared/pipeline.js`](shared/pipeline.js)).
+The table above is the raw record *before* that change; re-run offline on the same photos, the clean white piece went
+from one 65 % «stain» to zero findings and the defective olive hoodie kept its seam thread.
+
+**Caveats.** One inspector, who also built the system; repeated inspections of the same pieces; several seeded defects;
+verdicts on «stain»-type spots are the least certain (a speck of lint and a faint stain look alike at 2×). Returns: the
+factory's own estimate is that roughly 15 % of orders come back with a defect involved; there is no audited figure (the
+shop platform does not report returns), so the video states a goal — under 5 % — not a current rate.
+
+## Earlier: preliminary results — 7 photos (Oct 26–27)
 
 This is a **preliminary evaluation on 7 photos** of real garments from the factory, each with a defect the inspectors
 already knew about, run once each through [`dev/run_pipeline.mjs`](dev/run_pipeline.mjs) on Oct 26, 2026. It is not a
@@ -217,11 +278,15 @@ docs/DEPLOY-ar.md             deployment guide in Arabic for the factory
 Requirements: Node 22+ and Chrome. No `npm install` is needed for the station itself.
 
 1. Put your Meta API key in `meta_key.txt` at the repo root (git-ignored; the dev server reads it, nothing else does).
+   For `wrangler dev` / the Worker, copy [`.dev.vars.example`](.dev.vars.example) to `.dev.vars` and fill `META_API_KEY`.
+   Never commit a key; the judges' hosted demo above needs none (the key sits in the Worker).
 2. Copy [`station/config.example.js`](station/config.example.js) to `station/config.js`. For local runs leave
    `PROXY_URL` empty (the dev server proxies `/v1/*`), fill in the demo Supabase URL and publishable key.
 3. `node dev/serve.mjs` and open <http://localhost:8787/station/>.
 4. On a desktop there is no table camera: use the «📁 صورة من الجهاز» file button with any garment photo. The whole
-   pipeline runs in the browser exactly as on the tablet.
+   pipeline runs in the browser exactly as on the tablet. The station is in Arabic for the inspectors; `?lang=en` or the
+   «English» button switches the interface, and the model writes its reasons in the language the device ran in (so
+   the factory's saved inspections carry Arabic reasons even when browsed in English).
 5. Demo database: run [`sql/demo-schema.sql`](sql/demo-schema.sql) then [`sql/storage-policies.sql`](sql/storage-policies.sql)
    in a Supabase project's SQL editor (the hackathon demo project already has them applied).
 
@@ -319,8 +384,10 @@ design close-ups: D · edges and seams: E» (`result.summary`), so the inspector
   the design close-ups); next: measure its effect on repeated false alarms over a week of real inspections. Once those
   verdicts are in the hundreds, fine-tune **Muse Glimmer** on them (Fireworks offers free Glimmer training through
   November) into a SOLANG-specific defect classifier that pre-screens the tiles before Spark looks.
-- **Measurements against the size spec.** The silhouette step already measures from the SAM mask in pixels (it caught a
-  sleeve 1.5 cm shorter than the other on Oct 31, which the operator had not noticed). Next: a scale on the table (a 10 cm
+- **Measurements against the size spec.** The silhouette step already measures from the SAM mask in pixels, but as a
+  lay-dependent estimate (see the results section: right direction, inflated or missed when a sleeve lies diagonally or the
+  hood is spread). Next, in this order: measure along the sleeve itself (skeleton of the mask region) instead of the outer
+  outline; then a scale on the table (a 10 cm
   printed square in a corner, or a one-time calibration with an A4 sheet since the phone is fixed) and a spec table per
   model and size (body length, chest width, sleeve length, tolerance) → a card «body length 42 cm, spec 44 ± 1». The
   inspector picks the size before the shot; the piece must lie flat and neck-up. Realistic accuracy on knits about ±1 cm,
@@ -383,11 +450,24 @@ Everything in this repo was written after the hackathon opened on Oct 26; the co
   factory address after ten pieces — all fixed. The factory lays every piece sideways to fit the table, so the silhouette
   and the mirror now work in the garment's own frame instead of assuming neck-up (that lay had produced «sleeve 25 %
   shorter» and three «different cuff» alarms). The mirror is amber at most and switches off for a product the inspector
-  rejected it on twice. The real catch of the day: a sleeve 1.5 cm shorter than the other, confirmed with a tape, that the
-  operator had not noticed. The real misses: a red pen mark on orange and an oil stain on light gray (contrast), and an open
+  rejected it on twice. The sleeve 1.5 cm shorter than the other (tape-confirmed) was read at 3.8 % once and at 1.3–2.6 %
+  on the other lays — a lay-dependent estimate, not a catch to boast about (see the results section). The real misses: a red pen mark on orange and an oil stain on light gray (contrast), and an open
   cuff seam about 15 px wide — magnified three times the model reads it at 85 %, so step 9 (cuffs, collar, hems) was added
   and found it on the next run with no false alarm on the other photos of the day. Numbers so far, 20 pieces: 40 spots
   shown, 19 confirmed, 21 rejected, 4 added by the inspector (camera misses) — precision 48 % on judged spots, recall 83 %.
+
+- **Nov 1–2 — a full day on the table, then the video.** 18 more inspections at the factory (38 in all; the numbers above).
+  Things the day broke and what was done: the phone's camera went black after sitting in the background (iOS keeps the
+  track «live») and the still detector shot the black frame — a frame under 6/255 luma now restarts the camera and refuses
+  the shot; one stuck upload hung a run for five minutes — every model call is now abandoned after 90 s and the run
+  reports it instead; a garment cut off by the frame edge produced «sleeve 8.5 % shorter» — no length verdict when
+  `framing.cut` is set; confirmations below 70 % confidence were real 2 times in 10 — dropped (`TILE_CONFIRM_MIN`);
+  the English interface showed Arabic product names from the database — translated labels (number · code · type ·
+  colour · line); the tablet now shows the same «N Spark · M SAM · s · $» line as the phone so the live model calls are
+  on screen. Lessons that went into the operator guide rather than the code: a white thread on a white board has no
+  contrast, the order selected on the tablet is the one a shot is filed under, and sleeves must lie parallel with the hood
+  folded for the length number to mean anything. The demo video was cut from that evening's three takes (olive hoodie,
+  pink blouse with a seeded 4 cm sleeve difference, clean orange hoodie) with the inspector's own words subtitled.
 
 Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing the coding; every commit carries the co-author line.
 

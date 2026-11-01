@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+html,body{margin:0;width:1920px;height:1080px;background:#0f172a;color:#f8fafc;font-family:'Segoe UI',Arial,sans-serif;overflow:hidden}
+.wrap{box-sizing:border-box;width:1920px;height:1080px;padding:64px 80px 56px}
+.h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:34px}
+.h1{font-size:44px;font-weight:700}.h2{font-size:28px;color:#94a3b8}
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:22px 26px}
+.step{position:relative;background:#111c33;border:2px solid #1e3a5f;border-radius:18px;padding:22px 24px 20px 24px;min-height:150px}
+.n{position:absolute;top:-16px;left:22px;width:40px;height:40px;border-radius:50%;background:#1e293b;border:2px solid #334155;font-weight:800;font-size:22px;display:flex;align-items:center;justify-content:center}
+.who{font-size:21px;font-weight:700;letter-spacing:.5px;margin-bottom:8px}
+.sam .who{color:#60a5fa}.spark .who{color:#fbbf24}.both .who{color:#c4b5fd}.human .who{color:#4ade80}
+.sam{border-color:#1d4ed8}.spark{border-color:#b45309}.both{border-color:#6d28d9}.human{border-color:#15803d;background:#0f2a1c}
+.t{font-size:30px;font-weight:650;line-height:1.25;margin-bottom:8px}
+.d{font-size:23px;color:#cbd5e1;line-height:1.35}
+.foot{margin-top:30px;display:flex;gap:34px;font-size:24px;color:#cbd5e1}
+.foot b{color:#f8fafc}
+.foot span{background:#111c33;border:1.5px solid #1e3a5f;border-radius:999px;padding:8px 20px}
+</style></head><body><div class="wrap">
+<div class="h"><div class="h1">How it works — nine steps on Meta models</div><div class="h2">one phone, one tablet · under $0.20 per piece</div></div>
+<div class="flow">
+ <div class="step sam"><div class="n">1</div><div class="who">SAM 3.1</div><div class="t">Find the garment</div><div class="d">box + mask at full resolution; frame check (cut off, small, clutter)</div></div>
+ <div class="step both"><div class="n">2</div><div class="who">code</div><div class="t">Focus grid</div><div class="d">only tiles that touch the garment are inspected; table tiles are skipped</div></div>
+ <div class="step spark"><div class="n">3</div><div class="who">MUSE SPARK</div><div class="t">Inspect every tile, twice</div><div class="d">recall prompt, two passes; every spot is a candidate</div></div>
+ <div class="step spark"><div class="n">4</div><div class="who">MUSE SPARK</div><div class="t">Verify magnified 2× / 3×</div><div class="d">strict judge, with the inspector's past verdicts on this product as examples</div></div>
+ <div class="step both"><div class="n">5</div><div class="who">SAM mask + code</div><div class="t">Sleeve / leg length</div><div class="d">silhouette measure in the garment's own frame; skipped when the piece is cut off</div></div>
+ <div class="step both"><div class="n">6</div><div class="who">SAM parts + SPARK</div><div class="t">Left vs right</div><div class="d">the two sleeves or legs compared for construction differences</div></div>
+ <div class="step spark"><div class="n">7</div><div class="who">MUSE SPARK</div><div class="t">Overall look vs reference</div><div class="d">the correct piece (front / back) as reference; global defects only</div></div>
+ <div class="step spark"><div class="n">8</div><div class="who">SAM designs + SPARK</div><div class="t">Designs up close</div><div class="d">prints and embroidery magnified, compared with the reference</div></div>
+ <div class="step human"><div class="n">9</div><div class="who">SAM edges + SPARK → INSPECTOR</div><div class="t">Edges up close, then the human rules</div><div class="d">cuffs, collar, hem magnified for seams · the inspector confirms / rejects / adds, names the worker, decides — her verdicts teach the next piece</div></div>
+</div>
+<div class="foot"><span><b>Every answer is checked:</b> strict JSON · magnified judge · inspector examples · human at the end</span><span><b>Runtime models:</b> SAM 3.1 and Muse Spark only, via the Meta Model API</span></div>
+</div></body></html>

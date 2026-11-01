@@ -1,0 +1,7 @@
+# Copy to .dev.vars (git-ignored) for `npx wrangler dev` / the Cloudflare Worker. Never commit the real file.
+# Meta Model API key — the browser never sees it; the Worker adds it to /v1/responses (see _worker.js).
+META_API_KEY=
+# Optional: a station token the proxy requires in X-Station-Token (leave empty to allow any caller, as in the public demo).
+STATION_TOKEN=
+# Optional: per-IP requests per day through the proxy (default 4000 ≈ 100 pieces). The demo keeps the default.
+DAILY_LIMIT=4000
