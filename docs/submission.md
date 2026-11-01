@@ -1,6 +1,6 @@
 # Submission text — SOLANG Vision QC (Indie Developer track)
 
-Ready to paste into https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit on Tue Nov 3 / Wed Nov 4 (deadline Nov 4, 9:00 PM ET = Nov 5, 4:00 AM Cairo). Fill the two `{…}` placeholders (video link, form-specific answers) on the day. No faces, no worker names, no money amounts — percentages only.
+Ready to paste into https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit on Tue Nov 3 / Wed Nov 4 (deadline Nov 4, 9:00 PM ET = Nov 5, 4:00 AM Cairo). Video link filled Nov 2 (YouTube, Unlisted). No faces, no worker names, no money amounts — percentages only.
 
 ## Project name
 SOLANG Vision QC
@@ -41,7 +41,7 @@ SOLANG is a children's-wear factory in Cairo. Every garment passes a human final
 
 ### Demo (25 %)
 - Live station (no key needed): https://solang-vision-qc.saadmansour.workers.dev/station/ — pick a language, choose «One device», and either point a phone camera at a garment or press one of the three «🧪 Try a sample» buttons (factory photos with known defects) to watch a full inspection with the live model calls on screen.
-- Video ({YouTube unlisted link}, 2:41): the real table, three pieces, the inspector's own words subtitled — an olive hoodie with two seam threads caught and judged, a pink blouse with a seeded 4 cm sleeve difference caught by the silhouette check and confirmed with the tape, and a clean printed hoodie that passes with zero spots.
+- Video (https://youtu.be/8AhQ_bW44q0, 2:41): the real table, three pieces, the inspector's own words subtitled — an olive hoodie with two seam threads caught and judged, a pink blouse with a seeded 4 cm sleeve difference caught by the silhouette check and confirmed with the tape, and a clean printed hoodie that passes with zero spots.
 - Repo: https://github.com/saad-mansour/solang-vision-qc — README with the nine steps, the results, the verification layers, run-locally and deploy instructions, and a day-by-day build log.
 
 ## What existed before the event / what was built during it
@@ -53,5 +53,5 @@ Meta Model API (SAM 3.1, Muse Spark 1.3), the vendored `@meta-sam/parser`, Cloud
 ## Links
 - Live: https://solang-vision-qc.saadmansour.workers.dev/station/
 - Repo: https://github.com/saad-mansour/solang-vision-qc
-- Video: {YouTube unlisted link}
+- Video: https://youtu.be/8AhQ_bW44q0
 - Numbers: https://github.com/saad-mansour/solang-vision-qc/blob/main/docs/accuracy-2026-11-02.md
