@@ -547,7 +547,11 @@ export async function inspect(img, opts) {
         const th = LENGTH_DIFF[g.measure]
         const agree = g.measure === 'leg' ? s.lenDiffPct : Math.min(s.lenDiffPct, s.reachDiffPct)
         parts.lengthDiffPct = agree
-        if (agree >= th.amber) {
+        // a garment touching the frame edge has no measurable parts: the cut side reads as the «shorter» one (Nov 2: 8.5 % and 4.9 % on an
+        // equal-sleeved hoodie cut off at the top). The number stays in parts for the record; no finding, and parts.lengthSkipped says why.
+        const cut = framing && Array.isArray(framing.cut) && framing.cut.length > 0
+        if (cut) parts.lengthSkipped = 'cut:' + framing.cut.join('+')
+        if (agree >= th.amber && !cut) {
           const shorterLeft = s.maxL < s.maxR
           // the marker sits on the tip of the shorter part (its cuff / hem), in the measured frame → back to photo axes (Oct 31: the old mid-sleeve
           // estimate landed on the floor next to a sleeve laid diagonally)
