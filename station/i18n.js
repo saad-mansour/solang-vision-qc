@@ -41,6 +41,20 @@ export function t(key, vars) {
 }
 export const missingKeys = () => [...missing]
 
+// Product rows are typed in Arabic at the factory (name, colour, «خط 2»); in English the order list shows the parts that read in
+// English — order number, model code, garment type, colour, line — and leaves an unknown colour as typed (Nov 1).
+const COLOR_EN = { 'برتقالي': 'orange', 'أحمر': 'red', 'احمر': 'red', 'رمادي': 'gray', 'زهري': 'pink', 'وردي': 'pink', 'أخضر': 'green', 'اخضر': 'green',
+  'أزرق': 'blue', 'ازرق': 'blue', 'أسود': 'black', 'اسود': 'black', 'أبيض': 'white', 'ابيض': 'white', 'أصفر': 'yellow', 'اصفر': 'yellow', 'بني': 'brown',
+  'كحلي': 'navy', 'بيج': 'beige', 'فضي': 'silver', 'بنفسجي': 'purple', 'نبيتي': 'burgundy', 'تركواز': 'turquoise', 'موف': 'mauve' }
+const GARMENT_EN = { hoodie: 'hoodie', sweatshirt: 'sweatshirt', pants: 'pants', tshirt: 't-shirt', garment: '' }
+export function orderLabel(o) {
+  if (LANG !== 'en') return [o.order_number, o.product, o.color, o.line].filter(Boolean).join(' · ')
+  const color = o.color ? (COLOR_EN[String(o.color).trim()] || o.color) : ''
+  const line = o.line ? String(o.line).replace(/^\s*خط\s*/, 'line ') : ''
+  const garment = o.garment in GARMENT_EN ? GARMENT_EN[o.garment] : o.garment
+  return [o.order_number, o.model_code, garment, color, line].filter(Boolean).join(' · ')
+}
+
 // static text of index.html: exact (trimmed) matches only, whitespace around the text is kept
 export function applyStatic(root) {
   if (!hasWin || typeof document === 'undefined') return

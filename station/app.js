@@ -10,7 +10,7 @@ import { foregroundGrid } from '../shared/focus.js'
 import { openCamera, takePhoto, StillnessDetector, grayscaleSample } from './camera.js'
 import { openLink } from './link.js'
 import { makeSender, makeViewer } from './live.js'
-import { t, LANG, isEn, setLang, applyStatic, langChosen } from './i18n.js'
+import { t, LANG, isEn, setLang, applyStatic, langChosen, orderLabel } from './i18n.js'
 import { showWelcome, welcomed } from './welcome.js'
 
 const TYPE_AR = { hole: t('خرم'), snag: t('سحبة'), stain: t('بقعة'), loose_thread: t('خيط طالع'), stitching: t('درزة'), puckering: t('تكرمش'), unfinished_edge: t('حافة مش مخلّصة'), asymmetry: t('فرق بين الجهتين'), length: t('طول مختلف'), print: t('طباعة'), missing_part: t('قطعة ناقصة'), other: t('شي تاني') }
@@ -172,7 +172,7 @@ function setSide(side) { S.side = side; $('sideFront').classList.toggle('active'
 function renderOrders(list) {
   S.orders = list || []; const sel = $('orderSel'); clear(sel)
   if (!S.orders.length) { sel.appendChild(opt('', t('ما في طلبيات'))); if (S.db) sel.appendChild(opt('new', t('➕ موديل جديد…'))); S.order = null; renderRef(); return }
-  S.orders.forEach((o, i) => sel.appendChild(opt(String(i), [o.order_number, o.product, o.color, o.line].filter(Boolean).join(' · '))))
+  S.orders.forEach((o, i) => sel.appendChild(opt(String(i), orderLabel(o))))   // Arabic as typed; in English: number · code · type · colour · line
   if (S.db) sel.appendChild(opt('new', t('➕ موديل جديد…')))               // the demo list is hand-made (the factory system fills the real one by itself)
   const last = lsGet('vqc_order'); const idx = Math.max(0, S.orders.findIndex((o) => o.order_number === last))
   sel.value = String(idx); S.order = S.orders[idx]
