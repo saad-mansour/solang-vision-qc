@@ -473,8 +473,10 @@ Built by SOLANG's co-founder, who is not a programmer, with Claude Code doing th
 
 ## License
 
-Code in this repository: **all rights reserved**, see [`LICENSE`](LICENSE) — Copyright (c) 2026 Saad Mansour / SOLANG. Published for
-hackathon judging: read it and run it locally to evaluate the submission; no other use without written permission.
+Code in this repository is free and open-source software under the **GNU Affero General Public License v3.0** (AGPL-3.0-or-later),
+see [`LICENSE`](LICENSE) — Copyright (c) 2026 Saad Mansour / SOLANG. You may run, study, share and modify it; the one condition is that
+if you run a modified version as a service or ship it in a product, you publish your source under the same license. (Earlier commits
+carried other terms — MIT, then all-rights-reserved; from Nov 3, 2026 the AGPL applies to the whole repository.)
 The vendored `@meta-sam/parser` in `station/vendor/meta-sam-parser/` is Meta's and is distributed under the
 **SAM License**; see [`station/vendor/meta-sam-parser/NOTICE.md`](station/vendor/meta-sam-parser/NOTICE.md) and the
 [`LICENSE`](station/vendor/meta-sam-parser/LICENSE) next to it.

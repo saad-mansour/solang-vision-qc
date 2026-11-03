@@ -25,7 +25,7 @@ Checked Nov 2, 2026. ✓ = verified; ☐ = to do on submission day.
 - ☐ Upload as YouTube **Unlisted**; open the link from another phone before submitting.
 
 ## Repository
-- ✓ Public on GitHub. License: all rights reserved, judging permitted (no license is required by the rules).
+- ✓ Public on GitHub. License: **AGPL-3.0-or-later** (open source; changed from all-rights-reserved on Nov 3, 2026 after the organizers' "ensure your github is open source" reminder — the organizers had also stated that no specific license is required as long as the repo is public).
 - ✓ README states which Meta models are used and where each runs; setup instructions for running locally and for deploying; `.dev.vars.example` and `station/config.example.js` show how to add a key; no key committed (`meta_key.txt`, `.dev.vars`, `supabase_demo.txt` are git-ignored; the Worker holds the key as a secret).
 - ✓ Judges can run it without a key through the hosted demo (the Worker carries the key, per-IP daily cap, 90 s per call); recorded sample runs are in `dev/out/annotated/`.
 - ✓ A fresh clone was tested on Nov 2: station served, proxy reaches the Meta API with a key, secrets answer 404.
